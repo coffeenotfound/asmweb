@@ -4,3 +4,6 @@ build:
 
 run: build
 	./server
+
+gdb: build
+	gdb ./server

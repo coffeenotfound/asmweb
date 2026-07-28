@@ -37,13 +37,14 @@ SO_REUSEADDR = 2
 .section .rodata
 STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
+STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
 
 
 .section .data
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
 
-read_buf_size = 256
+read_buf_size = 2048
 g_read_buf:			.space read_buf_size, 0
 
 
@@ -72,7 +73,7 @@ _accept_loop:
 	cmp rax, 0
 	jl _accept_loop
 	mov [g_peer_socket_fd], eax
-		
+	
 	# read from socket
 	mov rax, SYS_READ
 	mov edi, [g_peer_socket_fd]
@@ -85,8 +86,10 @@ _accept_loop:
 	# write same data back to socket
 	mov rax, SYS_WRITE
 	mov edi, [g_peer_socket_fd]
-	lea rsi, [g_read_buf]
-	mov rdx, r11
+	# lea rsi, [g_read_buf]
+	# mov rdx, r11
+	mov rsi, offset test_resp
+	mov rdx, test_resp_len
 	syscall
 	call syscall_fail
 	

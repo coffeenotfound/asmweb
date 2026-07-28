@@ -37,7 +37,7 @@ SO_REUSEADDR = 2
 .section .rodata
 STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
-STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 0\r\n\r\n")
+STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE html><html><body>hello!</body></html>\r\n")
 
 
 .section .data

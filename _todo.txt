@@ -1,0 +1,9 @@
+asmweb todo
+
+[x] read request
+	[x] read loop into 4k buffer
+	[ ] fail with 400 if too big
+	[x] parse status line from request
+	[ ] parse url path from request
+[ ] route on url (index and specific file)
+[ ] write response headers

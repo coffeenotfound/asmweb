@@ -8,6 +8,7 @@
 
 # common symbols
 SYS_EXIT = 60
+SYS_READ = 0
 SYS_WRITE = 1
 SYS_SOCKET = 41
 SYS_SETSOCKOPT = 54
@@ -24,17 +25,26 @@ SO_REUSEADDR = 2
 
 
 # https://filippo.io/linux-syscall-table/
+# https://man7.org/linux/man-pages/man2/syscall.2.html#NOTES
 
 
 # preserved: 	rbx, rsp, rbp, r12, r13, r14, r15
 # scratch:		rax, rdi, rsi, rdx, rcx, r8, r9, r10, r11
-# syscall params	rax (syscall nr), rdi, rsi, rdx, r10, r8, r9
+# syscall params	rax (syscall nr), di, si, dx, r10, r8, r9
 
 
 
 .section .rodata
 STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
+
+
+.section .data
+g_socket_fd:		.int 0
+g_peer_socket_fd:	.int 0
+
+read_buf_size = 256
+g_read_buf:			.space read_buf_size, 0
 
 
 .section .text
@@ -47,6 +57,40 @@ _start:
 	
 	# create socket
 	call create_server_socket
+
+_accept_loop:
+	# accept syscall
+	sub rsp, (16 + 4)
+	mov rax, SYS_ACCEPT
+	mov edi, [g_socket_fd]
+	lea rsi, [rsp]
+	lea rdx, [rsp + 16]
+	syscall
+	add rsp, (16 + 4)
+	
+	# check if valid
+	cmp rax, 0
+	jl _accept_loop
+	mov [g_peer_socket_fd], eax
+		
+	# read from socket
+	mov rax, SYS_READ
+	mov edi, [g_peer_socket_fd]
+	lea rsi, [g_read_buf]
+	mov rdx, read_buf_size
+	syscall
+	mov r11, rax
+	call syscall_fail
+	
+	# write same data back to socket
+	mov rax, SYS_WRITE
+	mov edi, [g_peer_socket_fd]
+	lea rsi, [g_read_buf]
+	mov rdx, r11
+	syscall
+	call syscall_fail
+	
+	jmp _accept_loop;
 	
 	# exit(0)
 	xor rdi, rdi
@@ -80,22 +124,47 @@ create_server_socket:
 	mov rsi, SOCK_STREAM
 	mov rdx, IPPROTO_TCP
 	syscall
+	mov [g_socket_fd], eax
 	call syscall_fail
 	
 	# allow quick reuse of the port
 	mov rax, SYS_SETSOCKOPT
-	mov rdi, SOL_SOCKET
-	mov rsi, SO_REUSEADDR
-	push 1			# opt = alloca(u32)
-	mov rdx, rsp	# rdx = &opt
-	mov r10, 4
+	mov edi, [g_socket_fd]
+	mov rsi, SOL_SOCKET
+	mov rdx, SO_REUSEADDR
+	
+	sub rsp, 4		# opt = alloca(u32)
+	mov dword ptr [rsp], 1
+	mov r10, rsp	# rdx = &opt
+	
+	mov r8, 4		# size of opt (4 bytes)
+	syscall
+	add rsp, 4		# freea(opt)
+	call syscall_fail
+	
+	# construct local addr (sockaddr_in)
+	sub rsp, 16		# sizeof(sockaddr_in) == 16
+	mov word ptr [rsp + 0], AF_INET			# in host order
+	mov word ptr [rsp + 2], 0x901F			# port 8080, in network order
+	mov dword ptr [rsp + 4], 0x0100007F		# 127.0.0.1 in hex, in network order
+	
+	# bind socket to local addr
+	mov rax, SYS_BIND
+	mov edi, [g_socket_fd]
+	mov rsi, rsp
+	mov rdx, 16		# sizeof(sockaddr_in) == 16
+	syscall
+	add rsp, 16
+	call syscall_fail
+	
+	# listen on the socket
+	mov rax, SYS_LISTEN
+	mov edi, [g_socket_fd]
+	mov rsi, 256	# backlog of 256 connections (idk but seems sensible to me)
 	syscall
 	call syscall_fail
-	add rsp, 4		# freea(opt)
 	
-	# TODO: bind to local address
-	
-	# TODO: listen on socket
+	ret
 
 
 # in rsi -- string ptr

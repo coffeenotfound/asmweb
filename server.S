@@ -21,6 +21,8 @@ SYS_GETDENTS64 = 217
 
 O_RDONLY = 0x0	# kinda useless but heck, why not
 O_DIRECTORY = 0x10000
+DT_REG = 8
+DT_DIR = 4
 
 AF_INET = 2
 SOCK_STREAM = 1
@@ -300,7 +302,11 @@ _getdents_loop:
 	mov r10, rax					# r10 = bytes_read
 	mov r9, offset g_getdents_buf	# r9 = entry_cursor_ptr
 _getdents_entry_loop:
-	# TODO: ignore files "." and ".."
+	# ignore non-reg files
+	mov al, byte ptr [r9 + 8+8+2] 	# al = entry->d_type
+	cmp al, DT_REG
+	jne _getdents_skip_entry
+	
 		# DEBUG: write same data back to socket
 		lea rdi, [r9 + 8+8+2+1]
 		call str_len
@@ -309,10 +315,10 @@ _getdents_entry_loop:
 		mov rax, SYS_WRITE
 		mov edi, [g_peer_socket_fd]
 		lea rsi, [r9 + 8+8+2+1]
-		# rdx is from above
+		# rdx is set above
 		syscall
 		call syscall_fail
-	
+_getdents_skip_entry:
 	# incr cursor and check for end
 	mov bx, word ptr [r9 + 8+8]
 	add r9, rbx

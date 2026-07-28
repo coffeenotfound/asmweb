@@ -42,6 +42,9 @@ STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE h
 
 STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body>")
 
+STR_AND_LEN(str_path_single_slash, "/")
+STR_AND_LEN(str_path_index_html, "/index.html")
+
 
 .section .data
 g_socket_fd:		.int 0
@@ -53,6 +56,7 @@ g_req_bytes_read: 		.quad 0
 g_req_status_line_len: 	.quad 0
 g_req_path_offset: 		.quad 0
 g_req_path_len: 		.quad 0
+g_req_path_ptr: 		.quad 0
 
 
 .section .text
@@ -147,6 +151,23 @@ _found_bit:
 	ret
 
 
+# Compare two strings with lengths
+# in rdi	-- str_ptr1
+# in rsi	-- str_ptr2
+# in rcx	-- str_len1
+# in rdx	-- str_len2
+# out ZF	-- ZF=1 if equal
+str_cmp_nn:
+	// if len1 != len2, return unequal (ZF=0)
+	cmp rcx, rdx
+	jne _not_eq
+	# compare rcx number of bytes at rdi & rsi
+	cld		# clear DF -> loop forwards
+	repe cmpsb
+_not_eq:
+	ret		# ret ZF set by cmpsb or the first cmp
+
+
 process_request:
 _read_loop:
 	# read some bytes from socket
@@ -181,6 +202,10 @@ _read_loop:
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
 	inc rax			# todo: assuming method and path are separated by a single space
 	mov [g_req_path_offset], rax
+	
+	lea r8, [g_req_read_buf + rax]
+	mov [g_req_path_ptr], r8		# g_req_path_ptr = g_req_read_buf + g_req_path_offset
+	
 	# todo: trim further potential whitespace
 	# find end of path
 	add rdi, rax
@@ -188,7 +213,41 @@ _read_loop:
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
 	mov [g_req_path_len], rax
 	
+	# -- route request
+	# compare "/"
+	mov rdi, [g_req_path_ptr]
+	mov rsi, offset str_path_single_slash
+	mov rcx, [g_req_path_len]
+	mov rdx, str_path_single_slash_len
+	call str_cmp_nn
+	je _do_index_resp
+	# compare "/index.html"
+	mov rdi, [g_req_path_ptr]
+	mov rsi, offset str_path_index_html
+	mov rcx, [g_req_path_len]
+	mov rdx, str_path_index_html_len
+	call str_cmp_nn
+	je _do_index_resp
+	jmp _try_file_resp
 	
+_do_index_resp:
+	call send_index_resp
+	jmp _resp_done
+_try_file_resp:
+	call send_file_resp
+	jmp _resp_done
+	
+_resp_done:
+	# close the socket to end the http transaction
+	mov rax, SYS_CLOSE
+	mov edi, [g_peer_socket_fd]
+	syscall
+	call syscall_fail
+	
+	ret
+
+
+send_index_resp:
 	# DEBUG: write same data back to socket
 	mov rax, SYS_WRITE
 	mov edi, [g_peer_socket_fd]
@@ -206,13 +265,10 @@ _read_loop:
 	mov rdx, [g_req_path_len]
 	syscall
 	call syscall_fail
-	
-	# close the socket to end the http transaction
-	mov rax, SYS_CLOSE
-	mov edi, [g_peer_socket_fd]
-	syscall
-	call syscall_fail
-	
+	ret
+
+
+send_file_resp:
 	ret
 
 

@@ -11,3 +11,9 @@ asmweb todo
 	[x] parse url path from request
 [ ] route on url (index and specific file)
 [ ] write response headers
+
+
+
+* eso lang ideas
+move, hex, call
+macro substitution for reuse

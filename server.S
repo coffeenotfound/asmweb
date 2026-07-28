@@ -93,7 +93,7 @@ _accept_loop:
 	syscall
 	call syscall_fail
 	
-	jmp _accept_loop;
+	jmp _accept_loop
 	
 	# exit(0)
 	xor rdi, rdi
@@ -148,7 +148,13 @@ create_server_socket:
 	# construct local addr (sockaddr_in)
 	sub rsp, 16		# sizeof(sockaddr_in) == 16
 	mov word ptr [rsp + 0], AF_INET			# in host order
-	mov word ptr [rsp + 2], 0x901F			# port 8080, in network order
+	
+	# mov word ptr [rsp + 2], 0x901F			# port 8080, in network order
+	mov rax, 8080
+	bswap eax
+	shr eax, 16
+	mov word ptr [rsp + 2], ax
+	
 	mov dword ptr [rsp + 4], 0x0100007F		# 127.0.0.1 in hex, in network order
 	
 	# bind socket to local addr

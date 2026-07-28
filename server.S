@@ -16,6 +16,11 @@ SYS_BIND = 49
 SYS_LISTEN = 50
 SYS_ACCEPT = 43
 SYS_CLOSE = 3
+SYS_OPEN = 2
+SYS_GETDENTS64 = 217
+
+O_RDONLY = 0x0	# kinda useless but heck, why not
+O_DIRECTORY = 0x10000
 
 AF_INET = 2
 SOCK_STREAM = 1
@@ -45,10 +50,13 @@ STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n<
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
 
+data_dir_pathz: .asciz "data"
+
 
 .section .data
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
+g_data_dir_fd: 		.int 0
 
 req_read_buf_size = 4096
 g_req_read_buf:			.space req_read_buf_size, 0
@@ -57,6 +65,9 @@ g_req_status_line_len: 	.quad 0
 g_req_path_offset: 		.quad 0
 g_req_path_len: 		.quad 0
 g_req_path_ptr: 		.quad 0
+
+getdents_buf_size = 4096
+g_getdents_buf:			.space getdents_buf_size, 0
 
 
 .section .text
@@ -149,6 +160,16 @@ _chunk_loop:
 _found_bit:
 	add rax, r8			# ret cursor_offset + local_bit_idx
 	ret
+
+
+# string MUST be null terminated!
+# in rdi	-- str_ptr
+# out rax	-- len of string (offset of first nul byte)
+str_len:
+	mov rdx, 0x00	# needle = 0x00
+	xor rcx, rcx
+	dec rcx			# str_len = u64::MAX
+	jmp str_bfind
 
 
 # Compare two strings with lengths
@@ -248,6 +269,61 @@ _resp_done:
 
 
 send_index_resp:
+	# -- walk files to serve
+	# open data dir
+	mov rax, SYS_OPEN
+	mov rdi, offset data_dir_pathz
+	mov rsi, (O_DIRECTORY | O_RDONLY)
+	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
+	syscall
+	call syscall_fail
+	mov [g_data_dir_fd], eax
+	
+	# send response headers
+	mov rax, SYS_WRITE
+	mov edi, [g_peer_socket_fd]
+	mov rsi, offset default_resp_headers
+	mov rdx, default_resp_headers_len
+	syscall
+	call syscall_fail
+	
+_getdents_loop:	
+	# loop over dir files
+	mov rax, SYS_GETDENTS64
+	mov edi, [g_data_dir_fd]
+	mov rsi, offset g_getdents_buf
+	mov rdx, getdents_buf_size
+	syscall
+	call syscall_fail
+	jz _getdents_done
+	
+	mov r10, rax					# r10 = bytes_read
+	mov r9, offset g_getdents_buf	# r9 = entry_cursor_ptr
+_getdents_entry_loop:
+	# TODO: ignore files "." and ".."
+		# DEBUG: write same data back to socket
+		lea rdi, [r9 + 8+8+2+1]
+		call str_len
+		mov rdx, rax
+		
+		mov rax, SYS_WRITE
+		mov edi, [g_peer_socket_fd]
+		lea rsi, [r9 + 8+8+2+1]
+		# rdx is from above
+		syscall
+		call syscall_fail
+	
+	# incr cursor and check for end
+	mov bx, word ptr [r9 + 8+8]
+	add r9, rbx
+	lea rax, [g_getdents_buf + r10]
+	cmp r9, rax
+	jb _getdents_entry_loop
+	jmp _getdents_loop
+	
+_getdents_done:
+	
+	/*
 	# DEBUG: write same data back to socket
 	mov rax, SYS_WRITE
 	mov edi, [g_peer_socket_fd]
@@ -265,6 +341,7 @@ send_index_resp:
 	mov rdx, [g_req_path_len]
 	syscall
 	call syscall_fail
+	*/
 	ret
 
 

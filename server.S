@@ -48,8 +48,11 @@ g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
 
 req_read_buf_size = 4096
-g_req_read_buf:		.space req_read_buf_size, 0
-g_req_bytes_read: 	.quad 0
+g_req_read_buf:			.space req_read_buf_size, 0
+g_req_bytes_read: 		.quad 0
+g_req_status_line_len: 	.quad 0
+g_req_path_offset: 		.quad 0
+g_req_path_len: 		.quad 0
 
 
 .section .text
@@ -68,7 +71,7 @@ _accept_loop:
 	mov qword ptr [g_req_bytes_read], 0
 	
 	# accept syscall
-	sub rsp, (16 + 4)
+	sub rsp, (16 + 4)		# alloca(sockaddr, sockaddr_len)
 	mov rax, SYS_ACCEPT
 	mov edi, [g_socket_fd]
 	lea rsi, [rsp]
@@ -111,6 +114,8 @@ _die:
 	call exit_with_code
 
 
+# NOTE: doesn't impl scalar tails, so make sure your buffer
+#  has at least 32 bytes beginning at str_ptr
 # in rdi	-- str ptr
 # in rcx	-- str len
 # in rdx	-- needle byte to find
@@ -166,8 +171,23 @@ _read_loop:
 	call str_bfind
 	js _read_loop 	# if no \r found goto loop, else rax = offset of \r in read buffer
 	
+	mov [g_req_status_line_len], rax
 	
-	mov r9, rax		# r9 = offset of \r
+	# -- extract url path
+	# find beginning
+	lea rdi, [g_req_read_buf]
+	mov rcx, [g_req_status_line_len]
+	mov rdx, 32		# 32 = ' '
+	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
+	inc rax			# todo: assuming method and path are separated by a single space
+	mov [g_req_path_offset], rax
+	# todo: trim further potential whitespace
+	# find end of path
+	add rdi, rax
+	sub rcx, rax
+	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
+	mov [g_req_path_len], rax
+	
 	
 	# DEBUG: write same data back to socket
 	mov rax, SYS_WRITE
@@ -179,8 +199,11 @@ _read_loop:
 	
 	mov rax, SYS_WRITE
 	mov edi, [g_peer_socket_fd]
+	# lea rsi, [g_req_read_buf]
+	# mov rdx, r9
 	lea rsi, [g_req_read_buf]
-	mov rdx, r9
+	add rsi, [g_req_path_offset]
+	mov rdx, [g_req_path_len]
 	syscall
 	call syscall_fail
 	

@@ -69,7 +69,10 @@ data_dir_pathz: .asciz "data"
 # DEBUG: Does this work? PauseMan
 html_template:
 	#embed "html_index.html" prefix(.byte ) suffix(, 0)
+html_template_len = . - html_template
 
+STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
+STR_AND_LEN(STRZ_SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
 
 
 .section .data
@@ -92,6 +95,8 @@ intfmt_buf_len = 24
 g_intfmt_buf:			.space intfmt_buf_len, 0
 g_intfmt_ptrz:			.quad 0
 
+# g_pbuf_
+
 
 .section .text
 .global _start
@@ -101,8 +106,14 @@ _start:
 	mov rdx, msg_hello_len
 	call print_n
 	
-	# DEBUG:
-	call pbuf_create
+	/*
+	# DEBUG: test str_sfind_nn
+	mov rdi, offset html_template
+	mov rsi, offset STRZ_SLOT_INDEXFILE_NEXT
+	mov rcx, html_template_len
+	mov rdx, STRZ_SLOT_INDEXFILE_NEXT_len
+	call str_sfind_nn
+	*/
 	
 	# create socket
 	call create_server_socket

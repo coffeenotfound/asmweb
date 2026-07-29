@@ -1,0 +1,158 @@
+// https://godbolt.org/z/bePcrTMsq
+
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+typedef struct pbuf_node {
+	struct pbuf_node *next;
+	char *str_ptr;
+	unsigned long long str_len;
+} pbuf_node_t;
+
+void pbuf_print(pbuf_node_t *node) {
+	for (int i = 0; i < node->str_len; i++) {
+		printf("%c", node->str_ptr[i]);
+	}
+	if (node->next != NULL) {
+		pbuf_print(node->next);
+	} else {
+		printf("\n");
+	}
+}
+
+void *pbuf;
+void *pbuf_write_head = NULL;
+pbuf_node_t *pbuf_logical_last_node = NULL;
+//pbuf_node_t *pbuf_first_node = NULL;
+
+/*
+void pbuf_concat(
+	char *str
+) {
+	// Walk nodes till the end
+	pbuf_node_t** curr_next = &pbuf_first_node;
+	while (*curr_next != NULL) {
+		curr_next = &(*curr_next)->next;
+	}
+}
+*/
+
+unsigned long str_substr(
+	char* haystack,
+	unsigned long haystack_len,
+	char* needle,
+	unsigned long needle_len
+) {
+	// Haystack cannot possible contain a needle
+	// larger than itself
+	if (haystack_len < needle_len) return -1;
+
+	// find first char matches
+	for (int i = 0; i < (haystack_len - needle_len + 1); i++) {
+		for (int j = 0; j < needle_len; j++) {
+			if (haystack[i + j] != needle[j]) goto named_break;
+		}
+		return i;
+		named_break:
+	}
+	return -1;
+}
+
+// Doesn't enlink the node automatically, you must do that yourself
+// (or just use pbuf_substitute which is really the only supported operation right now)
+void pbuf_push_node_and_str(
+	char *str
+) {
+	// Write first node header
+	pbuf_node_t new_node = {
+		NULL,
+		pbuf_write_head + sizeof(pbuf_node_t),
+		strlen(str)
+	};
+	pbuf_node_t *new_node_ptr = (pbuf_node_t*)pbuf_write_head;
+	*new_node_ptr = new_node;
+
+	pbuf_write_head += sizeof(pbuf_node_t);
+
+	// Write first node string
+	memcpy((char*)pbuf_write_head, str, strlen(str));
+	pbuf_write_head += strlen(str);
+}
+
+// Doesn't enlink the node automatically, you must do that yourself
+// (or just use pbuf_substitute which is really the only supported operation right now)
+void pbuf_push_node_existing_str(
+	char *old_str,
+	unsigned int old_str_len
+) {
+	// Write first node header
+	pbuf_node_t new_node = {
+		NULL,
+		old_str,
+		old_str_len
+	};
+	*(pbuf_node_t*)pbuf_write_head = new_node;
+
+	pbuf_write_head += sizeof(pbuf_node_t);
+}
+
+bool pbuf_subst(char* search_str, char* replace_str) {
+	// Iterate over all pieces and try to find str
+	pbuf_node_t *curr_node = (pbuf_node_t*)pbuf;
+
+	do {
+		unsigned long substr_idx = str_substr(
+			curr_node->str_ptr,
+			curr_node->str_len,
+			search_str,
+			strlen(search_str)
+		);
+		printf("%d\n",substr_idx);
+
+		if (substr_idx != -1) {
+			pbuf_node_t* tail_node = curr_node->next;
+
+			// Push middle node
+			pbuf_node_t *middle_node = pbuf_write_head;
+			pbuf_push_node_and_str(replace_str);
+			curr_node->next = middle_node;
+
+			// Push end node
+			pbuf_node_t *end_node = pbuf_write_head;
+			pbuf_push_node_existing_str(curr_node->str_ptr + substr_idx + strlen(search_str), curr_node->str_len - substr_idx - strlen(search_str));
+			middle_node->next = end_node;
+
+			// Shorten curr node to exclude everything past the needle
+			curr_node->str_len = substr_idx;
+
+			end_node->next = tail_node;
+			return true;
+		}
+
+		curr_node = curr_node->next;
+	} while(curr_node != NULL);
+
+	return false;
+}
+
+int main() {
+	pbuf = (void*)malloc(4096);
+	pbuf_write_head = pbuf;
+	pbuf_logical_last_node = (pbuf_node_t*)pbuf;
+	//pbuf_node_t *pbuf_first_node = NULL;
+
+	pbuf_push_node_and_str("<body>[[NEXT_ELEM]]</body>");
+	pbuf_print((pbuf_node_t*)pbuf);
+
+	pbuf_subst("[[NEXT_ELEM]]", "<li>[[NEXT_ELEM]]");
+	pbuf_print((pbuf_node_t*)pbuf);
+
+	pbuf_subst("[[NEXT_ELEM]]", "<li>[[NEXT_ELEM]]");
+	pbuf_print((pbuf_node_t*)pbuf);
+
+	pbuf_subst("[[NEXT_ELEM]]", "<li>[[NEXT_ELEM]]");
+	pbuf_print((pbuf_node_t*)pbuf);
+
+	return 0;
+}

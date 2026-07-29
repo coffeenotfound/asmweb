@@ -34,10 +34,60 @@ _found_bit:
 	ret
 
 
-# in rdi	-- haystack_strz_ptr
-# in rsi	-- needle_strz_ptr
-str_sfind_zz:
-	# TODO
+# Can read up to 31 bytes beyond the haystack
+# (note: not very efficient at all!)
+# in rdi	-- haystack_ptr
+# in rsi	-- needle_ptr
+# in rcx	-- haystack_len
+# in rdx	-- needle_len
+# out ZF	-- ZF=1 if substring found
+str_sfind_nn:
+	xor r8, r8					# cursor_offset
+	vmovd xmm1, [rsi]			# cmp_mask = broadcast(needle[0])
+	vpbroadcastb ymm1, xmm1		# |
+	
+_chunk_loop2:
+	vmovups ymm0, [rdi + r8]
+	vpcmpeqb ymm2, ymm0, ymm1
+	vpmovmskb rax, ymm2
+	
+_local_bit_loop:
+	bsf r9, rax		# r9 = local_bit_idx
+	jz _end_curr_chunk
+	blsr rax, rax		# unset lowest bit (local_bit_idx) in r9
+	
+	# push regs used by str_cmp_nn
+	# (this is stupid, we should store our shit in preserved regs instead!!!)
+	push rdi
+	push rsi
+	push rcx
+	push rdx
+	
+	add rdi, r8
+	add rdi, r9
+	# mov rsi, rsi
+	mov rcx, rdx
+	# mov rdx, rdx
+	call str_cmp_nn
+	
+	pop rdx
+	pop rcx
+	pop rsi
+	pop rdi
+	
+	jnz _local_bit_loop		# ZF comes form call str_cmp_nn above (push doesn't affect flags)
+	
+	lea rax, [r8 + r9]
+	ret						# out ZF comes from above -- will be ZF=1 if it survived the jnz
+
+_end_curr_chunk:
+	add r8, 32			# ymm size
+	cmp r8, rcx			# cmp(cursor_offset, str_len)
+	jnae _chunk_loop2
+	
+	mov rax, -1
+	test rsp, rsp		# set ZF=0 (https://stackoverflow.com/questions/54499327/setting-and-clearing-the-zero-flag-in-x86)
+	ret
 
 
 # string MUST be null terminated!

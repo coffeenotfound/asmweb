@@ -15,10 +15,9 @@ asmweb todo
 [x] impl formatting ints
 
 [ ] impl search and replace templating
-
 [ ] index html output
-	[ ] create basic html template
-	[ ] impl easier "write all str (optionally null-terminated)" to socket func
+	[~] create basic html template
+	[x] impl easier "write all str (optionally null-terminated)" to socket func
 	[ ] send html
 
 

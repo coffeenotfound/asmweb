@@ -199,7 +199,7 @@ _not_eq:
 # in r10	-- u64 to format
 fmt_u64:
 	# load ptr to upper (last byte is nul byte)
-	lea r9, [offset g_intfmt_buf + intfmt_buf_len - 2]		# r9 = buf_cursor_ptr
+	mov r9, offset g_intfmt_buf + intfmt_buf_len - 2		# r9 = buf_cursor_ptr
 _digit_loop:
 	# Unsigned divide RDX:RAX by r/m64,
 	# with result stored in RAX := Quotient, RDX := Remainder

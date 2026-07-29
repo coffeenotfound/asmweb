@@ -2,8 +2,8 @@
 
 
 #define STR_AND_LEN(name, str) \
-	name: .ascii str; \
-	name##_len = . - name;
+	name: .asciz str; \
+	name##_len = . - name - 1;
 
 
 # common symbols

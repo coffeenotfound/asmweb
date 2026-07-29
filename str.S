@@ -1,6 +1,7 @@
 
 .section .text
 
+
 # NOTE: doesn't impl scalar tails, so make sure your buffer
 #  has at least 32 bytes beginning at str_ptr
 # in rdi	-- str ptr
@@ -36,7 +37,7 @@ _found_bit:
 # in rdi	-- haystack_strz_ptr
 # in rsi	-- needle_strz_ptr
 str_sfind_zz:
-	
+	# TODO
 
 
 # string MUST be null terminated!
@@ -44,8 +45,7 @@ str_sfind_zz:
 # out rax	-- len of string (offset of first nul byte)
 str_len:
 	mov rdx, 0x00	# needle = 0x00
-	xor rcx, rcx
-	dec rcx			# str_len = u64::MAX
+	mov rcx, -1		# str_len = u64::MAX
 	jmp str_bfind
 
 

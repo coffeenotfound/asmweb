@@ -14,6 +14,8 @@ asmweb todo
 [x] walk over data dir files
 [x] impl formatting ints
 
+[ ] impl search and replace templating
+
 [ ] index html output
 	[ ] create basic html template
 	[ ] impl easier "write all str (optionally null-terminated)" to socket func

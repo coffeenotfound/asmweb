@@ -42,17 +42,23 @@ SO_REUSEADDR = 2
 # syscall clobbers: rax, rcx, r11
 
 
+
 .section .rodata
 STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
 STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE html><html><body>hello!</body></html>\r\n")
 
 STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body>")
+STR_AND_LEN(str_resp_headers_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
 
 data_dir_pathz: .asciz "data"
+
+# DEBUG: Does this work? PauseMan
+html_template:
+	#embed "html_index.html" prefix(.byte ) suffix(, 0)
 
 
 
@@ -160,13 +166,18 @@ _chunk_loop:
 	cmp r8, rcx			# cmp(cursor_offset, str_len)
 	jnae _chunk_loop
 	
-	xor rax, rax		# rax = -1
-	dec rax				# .
+	mov rax, -1
 	ret
 	
 _found_bit:
 	add rax, r8			# ret cursor_offset + local_bit_idx
 	ret
+
+
+# in rdi	-- haystack_strz_ptr
+# in rsi	-- haystack_strz_ptr
+str_sfind_zz:
+	
 
 
 # string MUST be null terminated!
@@ -186,7 +197,7 @@ str_len:
 # in rdx	-- str_len2
 # out ZF	-- ZF=1 if equal
 str_cmp_nn:
-	// if len1 != len2, return unequal (ZF=0)
+	# if_ len1 != len2, return unequal (ZF=0)
 	cmp rcx, rdx
 	jne _not_eq
 	# compare rcx number of bytes at rdi & rsi
@@ -196,7 +207,8 @@ _not_eq:
 	ret		# ret ZF set by cmpsb or the first cmp
 
 
-# in r10	-- u64 to format
+# in r10				-- u64 to format
+# out g_intfmt_ptrz		-- ptr to formatted strz
 fmt_u64:
 	# load ptr to upper (last byte is nul byte)
 	mov r9, offset g_intfmt_buf + intfmt_buf_len - 2		# r9 = buf_cursor_ptr
@@ -252,7 +264,7 @@ _read_loop:
 	lea rdi, [g_req_read_buf]
 	mov rcx, [g_req_status_line_len]
 	mov rdx, 32		# 32 = ' '
-	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
+	call str_bfind	# todo: handle errors but we expect status lines to be formatted properly for now
 	inc rax			# todo: assuming method and path are separated by a single space
 	mov [g_req_path_offset], rax
 	
@@ -323,7 +335,7 @@ send_index_resp:
 	syscall
 	call syscall_fail
 	
-_getdents_loop:	
+_getdents_loop:
 	# loop over dir files
 	mov rax, SYS_GETDENTS64
 	mov edi, [g_data_dir_fd]
@@ -386,6 +398,37 @@ _getdents_done:
 
 
 send_file_resp:
+	# DEBUG: test html stuff
+	mov rsi, offset str_resp_headers_ok
+	mov rdx, str_resp_headers_ok_len
+	call write_resp_str
+	
+	mov rsi, offset html_template
+	mov rdx, -1
+	call write_resp_str
+	ret
+
+
+# in rsi	-- str_ptr
+# in rdx	-- str_len (-1 for null-terminated)
+write_resp_str:
+	cmp rdx, 0
+	jge _dont_str_len
+	
+	# call str_len
+	push rsi
+	
+	mov rdi, rsi
+	call str_len
+	mov rdx, rax
+	
+	pop rsi
+_dont_str_len:
+	mov rax, SYS_WRITE
+	mov edi, [g_peer_socket_fd]
+	mov rsi, rsi
+	mov rdx, rdx
+	syscall
 	ret
 
 
@@ -418,7 +461,7 @@ create_server_socket:
 	sub rsp, 16		# sizeof(sockaddr_in) == 16
 	mov word ptr [rsp + 0], AF_INET			# in host order
 	
-	# mov word ptr [rsp + 2], 0x901F			# port 8080, in network order
+	# mov word ptr [rsp + 2], 0x901F		# port 8080, in network order
 	mov rax, 8080
 	bswap eax
 	shr eax, 16

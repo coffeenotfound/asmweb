@@ -9,9 +9,15 @@ asmweb todo
 	[ ] fail with 400 if too big
 	[x] parse status line from request
 	[x] parse url path from request
-[ ] route on url (index and specific file)
-[ ] write response headers
+[x] route on url (index and specific file)
+[~] write response headers
+[x] walk over data dir files
+[x] impl formatting ints
 
+[ ] index html output
+	[ ] create basic html template
+	[ ] impl easier "write all str (optionally null-terminated)" to socket func
+	[ ] send html
 
 
 * eso lang ideas

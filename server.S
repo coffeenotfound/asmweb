@@ -55,6 +55,7 @@ STR_AND_LEN(str_path_index_html, "/index.html")
 data_dir_pathz: .asciz "data"
 
 
+
 .section .data
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
@@ -70,6 +71,10 @@ g_req_path_ptr: 		.quad 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
+
+intfmt_buf_len = 24
+g_intfmt_buf:			.space intfmt_buf_len, 0
+g_intfmt_ptrz:			.quad 0
 
 
 .section .text
@@ -191,6 +196,31 @@ _not_eq:
 	ret		# ret ZF set by cmpsb or the first cmp
 
 
+# in r10	-- u64 to format
+fmt_u64:
+	# load ptr to upper (last byte is nul byte)
+	lea r9, [offset g_intfmt_buf + intfmt_buf_len - 2]		# r9 = buf_cursor_ptr
+_digit_loop:
+	# Unsigned divide RDX:RAX by r/m64,
+	# with result stored in RAX := Quotient, RDX := Remainder
+	xor rdx, rdx
+	mov rax, r10
+	mov rbx, 10
+	div rbx
+
+	add rdx, '0'
+	mov byte ptr [r9], dl
+	
+	dec r9
+	mov r10, rax
+	cmp r10, 0
+	jnbe _digit_loop
+	
+	# store final int ptr
+	mov [g_intfmt_ptrz], r9
+	ret
+
+
 process_request:
 _read_loop:
 	# read some bytes from socket
@@ -270,6 +300,10 @@ _resp_done:
 	ret
 
 
+dirent64_off_reclen = 8+8
+dirent64_off_type = 8+8+2
+dirent64_off_name = 8+8+2+1
+
 send_index_resp:
 	# -- walk files to serve
 	# open data dir
@@ -303,24 +337,24 @@ _getdents_loop:
 	mov r9, offset g_getdents_buf	# r9 = entry_cursor_ptr
 _getdents_entry_loop:
 	# ignore non-reg files
-	mov al, byte ptr [r9 + 8+8+2] 	# al = entry->d_type
+	mov al, byte ptr [r9 + dirent64_off_type] 	# al = entry->d_type
 	cmp al, DT_REG
 	jne _getdents_skip_entry
 	
 		# DEBUG: write same data back to socket
-		lea rdi, [r9 + 8+8+2+1]
+		lea rdi, [r9 + dirent64_off_name]
 		call str_len
 		mov rdx, rax
 		
 		mov rax, SYS_WRITE
 		mov edi, [g_peer_socket_fd]
-		lea rsi, [r9 + 8+8+2+1]
+		lea rsi, [r9 + dirent64_off_name]
 		# rdx is set above
 		syscall
 		call syscall_fail
 _getdents_skip_entry:
 	# incr cursor and check for end
-	mov bx, word ptr [r9 + 8+8]
+	mov bx, word ptr [r9 + dirent64_off_reclen]		# read d_reclen
 	add r9, rbx
 	lea rax, [g_getdents_buf + r10]
 	cmp r9, rax

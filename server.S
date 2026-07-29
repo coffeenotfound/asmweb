@@ -217,8 +217,8 @@ _digit_loop:
 	# with result stored in RAX := Quotient, RDX := Remainder
 	xor rdx, rdx
 	mov rax, r10
-	mov rbx, 10
-	div rbx
+	mov rcx, 10
+	div rcx
 
 	add rdx, '0'
 	mov byte ptr [r9], dl
@@ -366,8 +366,8 @@ _getdents_entry_loop:
 		call syscall_fail
 _getdents_skip_entry:
 	# incr cursor and check for end
-	mov bx, word ptr [r9 + dirent64_off_reclen]		# read d_reclen
-	add r9, rbx
+	mov r8w, word ptr [r9 + dirent64_off_reclen]		# read d_reclen
+	add r9, r8
 	lea rax, [g_getdents_buf + r10]
 	cmp r9, rax
 	jb _getdents_entry_loop

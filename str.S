@@ -2,6 +2,26 @@
 .section .text
 
 
+# in rsi	-- src ptr
+# in rdi	-- dst ptr
+# in rcx	-- len
+#define MEM_COPY(src, dst, len) \
+	push rsi; \
+	push rdi; \
+	push rcx; \
+	\
+	mov rsi, src; \
+	mov rdi, dst; \
+	mov rcx, len; \
+	\
+	cld; /* clear DF -> loop forwards */  \
+	rep movsb; \
+	\
+	pop rcx; \
+	pop rdi; \
+	pop rsi;
+
+
 # NOTE: doesn't impl scalar tails, so make sure your buffer
 #  has at least 32 bytes beginning at str_ptr
 # in rdi	-- str ptr

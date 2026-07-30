@@ -75,6 +75,12 @@ STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
 STR_AND_LEN(STRZ_SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
 
 
+STR_AND_LEN(STRZ_AAA, "aaa bb ccc")
+STR_AND_LEN(STRZ_BBB, "bb")
+STR_AND_LEN(STRZ_ZZZ, "111##!##!bb!##!##333")
+
+
+
 .section .data
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
@@ -95,10 +101,105 @@ intfmt_buf_len = 24
 g_intfmt_buf:			.space intfmt_buf_len, 0
 g_intfmt_ptrz:			.quad 0
 
+
 # g_pbuf_
+tpl_buf_mem_len = 0x100000
+g_tpl_buf_mem_a:			.space tpl_buf_mem_len, 0
+g_tpl_buf_mem_b:			.space tpl_buf_mem_len, 0
+g_tpl_buf_ptr:				.quad 0
+g_tpl_buf_ptr_tmp:			.quad 0
+g_tpl_buf_written_bytes:	.quad 0
+
 
 
 .section .text
+
+
+/*
+# in rsi (r15)	-- search_strz
+# in rdi (r14)	-- replace_strz
+tpl_subst:
+	push r15
+	push r14
+	mov r15, rsi
+	mov r14, rdi
+	
+	mov rdi, rsi
+	call str_len
+	
+	# find search_str
+	mov rdi, [g_tpl_buf_ptr]
+	mov rsi, r15
+	mov rcx, tpl_buf_len
+	mov rdx, rax		# strlen from above
+	call str_sfind_nn
+	
+
+_subst_done:
+*/
+
+# in rsi (r15)	-- search_str_ptr
+# in rdi (r14)	-- replace_str_ptr
+# in rcx (r13)	-- search_str_len
+# in rdx (r12)	-- replace_str_len
+tpl_subst:
+	push r15
+	push r14
+	push r13
+	push r12
+	
+	mov r15, rsi
+	mov r14, rdi
+	mov r13, rcx
+	mov r12, rdx
+
+	# find substring
+	mov rdi, [g_tpl_buf_ptr]
+	mov rsi, r15
+	mov rcx, [g_tpl_buf_written_bytes]
+	mov rdx, r13
+	call str_sfind_nn
+	
+	# copy pre-match str
+	MEM_COPY([g_tpl_buf_ptr], [g_tpl_buf_ptr_tmp], rax)
+	# copy replace str
+	mov r9, [g_tpl_buf_ptr_tmp]		# r9 = *g_tpl_buf_ptr_tmp + substr_offset
+	add r9, rax
+	MEM_COPY(r14, r9, r12)
+	# copy post-match str
+	mov r9, [g_tpl_buf_ptr]			# r9 = *g_tpl_buf_ptr + substr_offset + search_str_len
+	add r9, rax
+	add r9, r13
+	mov r8, [g_tpl_buf_ptr_tmp]		# r8 = *g_tpl_buf_ptr_tmp + substr_offset + replace_str_len
+	add r8, rax
+	add r8, r12
+	mov r10, [g_tpl_buf_written_bytes]	# r10 = *g_tpl_buf_written_bytes - substr_offset - search_str_len
+	sub r10, rax
+	sub r10, r13
+	MEM_COPY(r9, r8, r10)
+	
+	sub [g_tpl_buf_written_bytes], r13
+	add [g_tpl_buf_written_bytes], r12
+	
+	
+	pop r12
+	pop r13
+	pop r14	
+	pop r15
+	
+	
+	# swap buffers
+	mov r9, [g_tpl_buf_ptr]
+	mov r8, [g_tpl_buf_ptr_tmp]
+	mov [g_tpl_buf_ptr], r8
+	mov [g_tpl_buf_ptr_tmp], r9
+	
+	
+	ret
+	
+	
+
+
 .global _start
 _start:
 	# print message
@@ -114,6 +215,32 @@ _start:
 	mov rdx, STRZ_SLOT_INDEXFILE_NEXT_len
 	call str_sfind_nn
 	*/
+	
+	# init tpl ptrs
+	mov qword ptr [g_tpl_buf_ptr], offset g_tpl_buf_mem_a
+	mov qword ptr [g_tpl_buf_ptr_tmp], offset g_tpl_buf_mem_b
+	
+	# DEBUG: Write initial tpl str
+	MEM_COPY(offset STRZ_AAA, [g_tpl_buf_ptr], STRZ_AAA_len)
+	mov qword ptr [g_tpl_buf_written_bytes], STRZ_AAA_len
+	
+	# DEBUG: test substitution
+	# in rsi (r15)	-- search_str_ptr
+	# in rdi (r14)	-- replace_str_ptr
+	# in rcx (r13)	-- search_str_len
+	# in rdx (r12)	-- replace_str_len
+	mov rsi, offset STRZ_BBB
+	mov rdi, offset STRZ_ZZZ
+	mov rcx, STRZ_BBB_len
+	mov rdx, STRZ_ZZZ_len
+	call tpl_subst
+	mov rsi, offset STRZ_BBB
+	mov rdi, offset STRZ_ZZZ
+	mov rcx, STRZ_BBB_len
+	mov rdx, STRZ_ZZZ_len
+	call tpl_subst
+	
+	
 	
 	# create socket
 	call create_server_socket

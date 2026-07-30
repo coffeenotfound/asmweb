@@ -25,6 +25,12 @@ O_DIRECTORY = 0x10000
 DT_REG = 8
 DT_DIR = 4
 
+# https://manpages.debian.org/testing/manpages/S_ISDIR.3.en.html
+# (note, these are octal literals!)
+S_IFMT = 0170000 	# bit mask for the file type bit field
+S_IFREG = 0100000 	# regular file
+S_IFDIR = 0040000 	# directory
+
 AF_INET = 2
 SOCK_STREAM = 1
 IPPROTO_TCP = 6
@@ -382,7 +388,7 @@ _read_loop:
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
 	mov [g_req_url_path_len], rax
 
-	# build data file path from url path
+	# -- build data file path from url path
 	# essentially we just copy data_dir_path ("data")
 	# and then the url path. Since the url path always has a
 	# leading slash (i think? :D), that's automatically
@@ -396,6 +402,49 @@ _read_loop:
 	add rdi, [g_req_url_path_len]
 	mov byte ptr [rdi], 0		# nul-terminate path
 	mov [g_req_data_pathz_len], r8
+	
+	# -- try open path
+	mov rax, SYS_OPEN
+	mov rdi, offset g_req_data_pathz_buf
+	mov rsi, O_RDONLY
+	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
+	syscall
+	cmp eax, 0
+	jl _file_not_found
+	mov dword ptr [g_open_resp_file_fd], eax
+	
+	# -- stat file to determine if its a folder
+	sub rsp, SIZEOF_STRUCT_STAT		# alloc struct stat
+	
+	mov rax, SYS_FSTAT
+	mov edi, [g_open_resp_file_fd]
+	mov rsi, rsp
+	syscall
+	# todo: error handling
+	
+	mov r9d, dword ptr [rsp + OFFOF_STRUCT_STAT_st_mode]	# r9 = stat.st_mode
+	add rsp, SIZEOF_STRUCT_STAT
+	
+	# check if its a folder
+	and r9d, S_IFMT
+	cmp r9d, S_IFDIR
+	jz _as_folder
+	cmp r9d, S_IFREG
+	jz _as_file
+	jmp _file_not_found
+	
+_as_folder:
+	call send_folder_index_resp
+	jmp _resp_done
+_as_file:
+	call send_file_resp
+	jmp _resp_done
+_file_not_found:
+	# send 404 back
+	mov rsi, offset str_resp_headers_404
+	mov rdx, str_resp_headers_404_len
+	call write_resp_str
+	jmp _resp_done
 	
 	# -- route request
 	/*
@@ -422,7 +471,6 @@ _try_file_resp:
 	call send_file_resp
 	jmp _resp_done
 	*/
-	call try_send_file_resp
 	
 _resp_done:
 	# close the socket to end the http transaction
@@ -434,34 +482,7 @@ _resp_done:
 	ret
 
 
-# out rax	-- 1 = successful, 0 = not a file
-try_send_file_resp:
-	# -- try open path as file
-	# if_ successfull we serve either as file or folder index
-	mov rax, SYS_OPEN
-	mov rdi, offset g_req_data_pathz_buf
-	mov rsi, O_RDONLY
-	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
-	syscall
-	cmp eax, 0
-	jl _file_not_found
-	mov dword ptr [g_open_resp_file_fd], eax
-	
-	# -- stat file to determine if its a folder
-	# (and we need to send an index file)
-	sub rsp, SIZEOF_STRUCT_STAT		# alloc struct stat
-	
-	mov rax, SYS_FSTAT
-	mov edi, [g_open_resp_file_fd]
-	mov rsi, rsp
-	syscall
-	# todo: error handling
-	
-	mov r9d, dword ptr [rsp + OFFOF_STRUCT_STAT_st_mode]	# r9 = stat.st_mode
-	add rsp, SIZEOF_STRUCT_STAT
-	# todo: do something if this is a folder
-	
-	
+send_file_resp:
 	# send success headers
 	# in rsi	-- str_ptr
 	# in rdx	-- str_len (-1 for null-terminated)
@@ -502,11 +523,6 @@ _file_send_done:
 	syscall
 	call syscall_fail
 	
-	mov rax, 1
-	ret
-	
-_file_not_found:
-	mov rax, 0
 	ret
 
 
@@ -514,8 +530,9 @@ dirent64_off_reclen = 8+8
 dirent64_off_type = 8+8+2
 dirent64_off_name = 8+8+2+1
 
-send_index_resp:
+send_folder_index_resp:
 	# -- walk files to serve
+	/*
 	# open data dir
 	mov rax, SYS_OPEN
 	mov rdi, offset data_dir_pathz
@@ -524,6 +541,7 @@ send_index_resp:
 	syscall
 	call syscall_fail
 	mov [g_data_dir_fd], eax
+	*/
 	
 	# send response headers
 	mov rax, SYS_WRITE
@@ -536,7 +554,7 @@ send_index_resp:
 _getdents_loop:
 	# loop over dir files
 	mov rax, SYS_GETDENTS64
-	mov edi, [g_data_dir_fd]
+	mov edi, [g_open_resp_file_fd]
 	mov rsi, offset g_getdents_buf
 	mov rdx, getdents_buf_size
 	syscall
@@ -592,18 +610,6 @@ _getdents_done:
 	syscall
 	call syscall_fail
 	*/
-	ret
-
-
-send_file_resp:
-	# DEBUG: test html stuff
-	mov rsi, offset str_resp_headers_ok
-	mov rdx, str_resp_headers_ok_len
-	call write_resp_str
-	
-	mov rsi, offset html_template
-	mov rdx, -1
-	call write_resp_str
 	ret
 
 

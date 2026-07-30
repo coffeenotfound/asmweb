@@ -64,7 +64,8 @@ STR_AND_LEN(str_resp_headers_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
 
-data_dir_pathz: .asciz "data"
+STR_AND_LEN(data_dir_pathz, "data")
+
 
 # DEBUG: Does this work? PauseMan
 html_template:
@@ -85,14 +86,21 @@ STR_AND_LEN(STRZ_ZZZ, "111##!##!bb!##!##333")
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
 g_data_dir_fd: 		.int 0
+g_open_resp_file_fd:	.int 0
 
 req_read_buf_size = 4096
 g_req_read_buf:			.space req_read_buf_size, 0
 g_req_bytes_read: 		.quad 0
 g_req_status_line_len: 	.quad 0
 g_req_path_offset: 		.quad 0
-g_req_path_len: 		.quad 0
-g_req_path_ptr: 		.quad 0
+# url_path points into the req buf and is not nul-terminated
+g_req_url_path_len: 		.quad 0
+g_req_url_path_ptr: 		.quad 0
+# data_path is assembled to be the actual requested file path ("data/<url_path>")
+# and *is* nul-terminated
+g_req_data_pathz_len: 		.quad 0
+req_data_path_len = 2048
+g_req_data_pathz_buf: 		.space req_data_path_len, 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
@@ -355,16 +363,29 @@ _read_loop:
 	mov [g_req_path_offset], rax
 	
 	lea r8, [g_req_read_buf + rax]
-	mov [g_req_path_ptr], r8		# g_req_path_ptr = g_req_read_buf + g_req_path_offset
+	mov [g_req_url_path_ptr], r8		# g_req_path_ptr = g_req_read_buf + g_req_path_offset
 	
 	# todo: trim further potential whitespace
 	# find end of path
 	add rdi, rax
 	sub rcx, rax
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
-	mov [g_req_path_len], rax
+	mov [g_req_url_path_len], rax
+	
+	# build data file path from url path
+	mov rdi, offset g_req_data_pathz_buf
+	MEM_COPY(offset data_dir_pathz, rdi, data_dir_pathz_len)	# copy data_dir ("data")
+	mov r8, data_dir_pathz_len
+	add rdi, r8
+	MEM_COPY([g_req_url_path_ptr], rdi, [g_req_url_path_len])		# copy url path (always contains leading slash!)
+	add r8, [g_req_url_path_len]
+	mov byte ptr [rdi + r8], 0		# nul-terminate path
+	mov [g_req_data_pathz_len], r8
+	nop
 	
 	# -- route request
+	call try_send_file_resp
+	/*
 	# compare "/"
 	mov rdi, [g_req_path_ptr]
 	mov rsi, offset str_path_single_slash
@@ -387,6 +408,7 @@ _do_index_resp:
 _try_file_resp:
 	call send_file_resp
 	jmp _resp_done
+	*/
 	
 _resp_done:
 	# close the socket to end the http transaction
@@ -394,6 +416,28 @@ _resp_done:
 	mov edi, [g_peer_socket_fd]
 	syscall
 	call syscall_fail
+	
+	ret
+
+
+try_send_file_resp:
+	# try open path as file, if successfull
+	# we serve that file back
+	mov rax, SYS_OPEN
+	mov rdi, offset g_req_data_pathz_buf
+	inc rdi			# skip over leading slash (to make path relative)
+	mov rsi, O_RDONLY
+	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
+	syscall
+	cmp eax, 0
+	jb _fail
+	mov dword ptr [g_open_resp_file_fd], eax
+	ret
+	
+_fail:
+	ud2
+_close_file:
+	
 	
 	ret
 

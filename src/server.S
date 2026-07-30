@@ -80,9 +80,13 @@ STR_AND_LEN(str_path_index_html, "/index.html")
 
 STR_AND_LEN(data_dir_pathz, "./data")
 
-html_template:
-	#embed "../html/html_index.html" prefix(.byte ) suffix(, 0)
-html_template_len = . - html_template
+html_index:
+	#embed "../html/index.html" prefix(.byte ) suffix(, 0)
+html_index_len = . - html_index
+
+html_slot_indexfile:
+	#embed "../html/slot_indexfile.html" prefix(.byte ) suffix(, 0)
+html_slot_indexfile_len = . - html_slot_indexfile
 
 STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
 STR_AND_LEN(STRZ_SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
@@ -157,9 +161,14 @@ _start:
 	mov qword ptr [g_tpl_buf_ptr], offset g_tpl_buf_mem_a
 	mov qword ptr [g_tpl_buf_ptr_tmp], offset g_tpl_buf_mem_b
 	
+	/*
 	# DEBUG: Write initial tpl str
 	MEM_COPY(offset STRZ_AAA, [g_tpl_buf_ptr], STRZ_AAA_len)
 	mov qword ptr [g_tpl_buf_written_bytes], STRZ_AAA_len
+	*/
+	mov rsi, offset STRZ_AAA
+	mov rcx, STRZ_AAA_len
+	call tpl_write_first
 	
 	# DEBUG: test substitution
 	# in rsi (r15)	-- search_str_ptr
@@ -176,7 +185,6 @@ _start:
 	mov rcx, STRZ_BBB_len
 	mov rdx, STRZ_ZZZ_len
 	call tpl_subst
-	
 	
 	
 	# create socket
@@ -456,13 +464,10 @@ send_folder_index_resp:
 	mov [g_data_dir_fd], eax
 	*/
 	
-	# send response headers
-	mov rax, SYS_WRITE
-	mov edi, [g_peer_socket_fd]
-	mov rsi, offset default_resp_headers
-	mov rdx, default_resp_headers_len
-	syscall
-	call syscall_fail
+	# start templating
+	mov rsi, offset html_index
+	mov rcx, html_index_len
+	call tpl_write_first
 	
 _getdents_loop:
 	# loop over dir files
@@ -507,6 +512,12 @@ _getdents_skip_entry:
 	jmp _getdents_loop
 	
 _getdents_done:
+	
+	# send ok response headers
+	# todo: maybe send 500 if something went wrong
+	mov rsi, offset default_resp_headers
+	mov rdx, default_resp_headers_len
+	call write_resp_str
 	
 	/*
 	# DEBUG: write same data back to socket

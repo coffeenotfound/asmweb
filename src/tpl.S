@@ -1,9 +1,9 @@
-.section text
+.section .text
 
-# in rdi	-- str_ptr
+# in rsi	-- str_ptr
 # in rcx	-- str_len
 tpl_write_first:
-	MEM_COPY(rdi, [g_tpl_buf_ptr], rcx)
+	MEM_COPY(rsi, [g_tpl_buf_ptr], rcx)
 	mov qword ptr [g_tpl_buf_written_bytes], rcx
 	ret
 

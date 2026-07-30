@@ -18,6 +18,7 @@ SYS_ACCEPT = 43
 SYS_CLOSE = 3
 SYS_OPEN = 2
 SYS_GETDENTS64 = 217
+SYS_FSTAT = 5
 
 O_RDONLY = 0x0	# kinda useless but heck, why not
 O_DIRECTORY = 0x10000
@@ -30,6 +31,9 @@ IPPROTO_TCP = 6
 SOL_SOCKET = 1
 SO_REUSEADDR = 2
 
+# struct stat layout on x86_64: https://github.com/torvalds/linux/blob/e05b559f9cda350d0ab33c44a8c1151ca62d2875/arch/x86/include/uapi/asm/stat.h#L83
+OFFOF_STRUCT_STAT_st_mode = 24
+SIZEOF_STRUCT_STAT = 144
 
 
 # other source files to be included
@@ -67,12 +71,12 @@ STR_AND_LEN(str_resp_headers_404, "HTTP/1.1 404 Not Found\r\nConnection: close\r
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
 
-STR_AND_LEN(data_dir_pathz, "data")
+STR_AND_LEN(data_dir_pathz, "./data")
 
 
 # DEBUG: Does this work? PauseMan
 html_template:
-	#embed "html_index.html" prefix(.byte ) suffix(, 0)
+	#embed "../template/html_index.html" prefix(.byte ) suffix(, 0)
 html_template_len = . - html_template
 
 STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
@@ -394,7 +398,6 @@ _read_loop:
 	mov [g_req_data_pathz_len], r8
 	
 	# -- route request
-	call try_send_file_resp
 	/*
 	# compare "/"
 	mov rdi, [g_req_path_ptr]
@@ -402,14 +405,14 @@ _read_loop:
 	mov rcx, [g_req_path_len]
 	mov rdx, str_path_single_slash_len
 	call str_cmp_nn
-	je _do_index_resp
+	je _do_root_index_resp
 	# compare "/index.html"
 	mov rdi, [g_req_path_ptr]
 	mov rsi, offset str_path_index_html
 	mov rcx, [g_req_path_len]
 	mov rdx, str_path_index_html_len
 	call str_cmp_nn
-	je _do_index_resp
+	je _do_root_index_resp
 	jmp _try_file_resp
 	
 _do_index_resp:
@@ -419,6 +422,7 @@ _try_file_resp:
 	call send_file_resp
 	jmp _resp_done
 	*/
+	call try_send_file_resp
 	
 _resp_done:
 	# close the socket to end the http transaction
@@ -432,8 +436,8 @@ _resp_done:
 
 # out rax	-- 1 = successful, 0 = not a file
 try_send_file_resp:
-	# try open path as file
-	# if_ successfull we serve that file back
+	# -- try open path as file
+	# if_ successfull we serve either as file or folder index
 	mov rax, SYS_OPEN
 	mov rdi, offset g_req_data_pathz_buf
 	mov rsi, O_RDONLY
@@ -442,6 +446,21 @@ try_send_file_resp:
 	cmp eax, 0
 	jl _file_not_found
 	mov dword ptr [g_open_resp_file_fd], eax
+	
+	# -- stat file to determine if its a folder
+	# (and we need to send an index file)
+	sub rsp, SIZEOF_STRUCT_STAT		# alloc struct stat
+	
+	mov rax, SYS_FSTAT
+	mov edi, [g_open_resp_file_fd]
+	mov rsi, rsp
+	syscall
+	# todo: error handling
+	
+	mov r9d, dword ptr [rsp + OFFOF_STRUCT_STAT_st_mode]	# r9 = stat.st_mode
+	add rsp, SIZEOF_STRUCT_STAT
+	# todo: do something if this is a folder
+	
 	
 	# send success headers
 	# in rsi	-- str_ptr

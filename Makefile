@@ -1,6 +1,6 @@
 
 build:
-	gcc -static -nostdlib -g -o server server.S
+	gcc -static -nostdlib -g -o server -I./src src/server.S
 
 run: build
 	./server

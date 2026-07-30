@@ -564,11 +564,15 @@ _getdents_loop:
 	mov r10, rax					# r10 = bytes_read
 	mov r9, offset g_getdents_buf	# r9 = entry_cursor_ptr
 _getdents_entry_loop:
-	# ignore non-reg files
+	# only list reg and dir files
 	mov al, byte ptr [r9 + dirent64_off_type] 	# al = entry->d_type
 	cmp al, DT_REG
-	jne _getdents_skip_entry
-	
+	je _getdents_accept_entry
+	# todo: this also accepts . and .. meta files (we should probably ignore these)
+	cmp al, DT_DIR
+	je _getdents_accept_entry
+	jmp _getdents_skip_entry
+_getdents_accept_entry:
 		# DEBUG: write same data back to socket
 		lea rdi, [r9 + dirent64_off_name]
 		call str_len

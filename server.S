@@ -60,6 +60,8 @@ STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE h
 
 STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body>")
 STR_AND_LEN(str_resp_headers_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+STR_AND_LEN(str_resp_headers_file_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
+STR_AND_LEN(str_resp_headers_404, "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n")
 
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
@@ -104,6 +106,9 @@ g_req_data_pathz_buf: 		.space req_data_path_len, 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
+
+resp_fsend_buf_size = 4094*8
+g_resp_fsend_buf:		.space resp_fsend_buf_size, 0
 
 intfmt_buf_len = 24
 g_intfmt_buf:			.space intfmt_buf_len, 0
@@ -160,7 +165,7 @@ tpl_subst:
 	mov r14, rdi
 	mov r13, rcx
 	mov r12, rdx
-
+	
 	# find substring
 	mov rdi, [g_tpl_buf_ptr]
 	mov rsi, r15
@@ -371,7 +376,7 @@ _read_loop:
 	sub rcx, rax
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
 	mov [g_req_url_path_len], rax
-	
+
 	# build data file path from url path
 	# essentially we just copy data_dir_path ("data")
 	# and then the url path. Since the url path always has a
@@ -424,24 +429,64 @@ _resp_done:
 	ret
 
 
+# out rax	-- 1 = successful, 0 = not a file
 try_send_file_resp:
 	# try open path as file
-	# if successfull we serve that file back
+	# if_ successfull we serve that file back
 	mov rax, SYS_OPEN
 	mov rdi, offset g_req_data_pathz_buf
 	mov rsi, O_RDONLY
 	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
 	syscall
 	cmp eax, 0
-	jb _fail
+	jl _file_not_found
 	mov dword ptr [g_open_resp_file_fd], eax
+	
+	# send success headers
+	# in rsi	-- str_ptr
+	# in rdx	-- str_len (-1 for null-terminated)
+	mov rsi, str_resp_headers_file_ok
+	mov rdx, str_resp_headers_file_ok_len
+	call write_resp_str
+	
+	# -- send file data back in chunks
+_read_chunk_loop:	
+	# read data from file
+	mov rax, SYS_READ
+	mov edi, [g_open_resp_file_fd]
+	mov rsi, offset g_resp_fsend_buf
+	mov rdx, resp_fsend_buf_size
+	syscall
+	cmp rax, 0
+	jz _file_send_done		# 0 bytes -> end of file
+	# todo: handle error
+	
+	mov r9, rax		# r9 = bytes left to send
+	xor r8, r8		# r8 = send cursor
+_write_chunk_loop:
+	mov rax, SYS_WRITE
+	mov edi, [g_peer_socket_fd]
+	lea rsi, [r8 + offset g_resp_fsend_buf]
+	mov rdx, r9
+	syscall
+	# todo: handle error
+	add r8, rax
+	sub r9, rax
+	jnle _write_chunk_loop		# this chunk still has bytes, do write() again
+	jmp _read_chunk_loop		# read next chunk
+	
+_file_send_done:
+	# close file
+	mov rax, SYS_CLOSE
+	mov edi, [g_open_resp_file_fd]
+	syscall
+	call syscall_fail
+	
+	mov rax, 1
 	ret
 	
-_fail:
-	ud2
-_close_file:
-	
-	
+_file_not_found:
+	mov rax, 0
 	ret
 
 

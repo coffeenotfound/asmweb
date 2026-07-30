@@ -445,7 +445,7 @@ try_send_file_resp:
 	# send success headers
 	# in rsi	-- str_ptr
 	# in rdx	-- str_len (-1 for null-terminated)
-	mov rsi, str_resp_headers_file_ok
+	mov rsi, offset str_resp_headers_file_ok
 	mov rdx, str_resp_headers_file_ok_len
 	call write_resp_str
 	

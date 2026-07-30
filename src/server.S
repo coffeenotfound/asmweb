@@ -80,10 +80,8 @@ STR_AND_LEN(str_path_index_html, "/index.html")
 
 STR_AND_LEN(data_dir_pathz, "./data")
 
-
-# DEBUG: Does this work? PauseMan
 html_template:
-	#embed "../template/html_index.html" prefix(.byte ) suffix(, 0)
+	#embed "../html/html_index.html" prefix(.byte ) suffix(, 0)
 html_template_len = . - html_template
 
 STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")

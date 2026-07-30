@@ -373,15 +373,19 @@ _read_loop:
 	mov [g_req_url_path_len], rax
 	
 	# build data file path from url path
+	# essentially we just copy data_dir_path ("data")
+	# and then the url path. Since the url path always has a
+	# leading slash (i think? :D), that's automatically
+	# the seperator between data dir and url path
 	mov rdi, offset g_req_data_pathz_buf
-	MEM_COPY(offset data_dir_pathz, rdi, data_dir_pathz_len)	# copy data_dir ("data")
+	MEM_COPY(offset data_dir_pathz, rdi, data_dir_pathz_len)		# copy data_dir ("data")
 	mov r8, data_dir_pathz_len
 	add rdi, r8
-	MEM_COPY([g_req_url_path_ptr], rdi, [g_req_url_path_len])		# copy url path (always contains leading slash!)
+	MEM_COPY([g_req_url_path_ptr], rdi, [g_req_url_path_len])		# copy url path
 	add r8, [g_req_url_path_len]
-	mov byte ptr [rdi + r8], 0		# nul-terminate path
+	add rdi, [g_req_url_path_len]
+	mov byte ptr [rdi], 0		# nul-terminate path
 	mov [g_req_data_pathz_len], r8
-	nop
 	
 	# -- route request
 	call try_send_file_resp
@@ -421,11 +425,10 @@ _resp_done:
 
 
 try_send_file_resp:
-	# try open path as file, if successfull
-	# we serve that file back
+	# try open path as file
+	# if successfull we serve that file back
 	mov rax, SYS_OPEN
 	mov rdi, offset g_req_data_pathz_buf
-	inc rdi			# skip over leading slash (to make path relative)
 	mov rsi, O_RDONLY
 	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
 	syscall

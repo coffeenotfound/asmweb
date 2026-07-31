@@ -67,9 +67,9 @@ SIZEOF_STRUCT_STAT = 144
 .section .rodata
 STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
-STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE html><html><body>hello!</body></html>\r\n")
+# STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE html><html><body>hello!</body></html>\r\n")
 
-STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n<!DOCTYPE html><html><body>")
+STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 STR_AND_LEN(str_resp_headers_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 # not sending Content-Type seems to be enough for getting MIME sniffing in browsers to work
 STR_AND_LEN(str_resp_headers_file_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Disposition:inline\r\n\r\n")
@@ -88,8 +88,8 @@ html_slot_indexfile:
 	#embed "../html/slot_indexfile.html" prefix(.byte ) suffix(, 0)
 html_slot_indexfile_len = . - html_slot_indexfile
 
-STR_AND_LEN(STRZ_SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
-STR_AND_LEN(STRZ_SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
+STR_AND_LEN(SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
+STR_AND_LEN(SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
 
 
 STR_AND_LEN(STRZ_AAA, "aaa bb ccc")
@@ -163,9 +163,9 @@ _start:
 	
 	/*
 	# DEBUG: Write initial tpl str
-	MEM_COPY(offset STRZ_AAA, [g_tpl_buf_ptr], STRZ_AAA_len)
-	mov qword ptr [g_tpl_buf_written_bytes], STRZ_AAA_len
-	*/
+	#MEM_COPY(offset STRZ_AAA, [g_tpl_buf_ptr], STRZ_AAA_len)
+	#mov qword ptr [g_tpl_buf_written_bytes], STRZ_AAA_len
+	
 	mov rsi, offset STRZ_AAA
 	mov rcx, STRZ_AAA_len
 	call tpl_write_first
@@ -185,7 +185,7 @@ _start:
 	mov rcx, STRZ_BBB_len
 	mov rdx, STRZ_ZZZ_len
 	call tpl_subst
-	
+	*/
 	
 	# create socket
 	call create_server_socket
@@ -452,6 +452,9 @@ dirent64_off_type = 8+8+2
 dirent64_off_name = 8+8+2+1
 
 send_folder_index_resp:
+	push r15
+	push r14
+	
 	# -- walk files to serve
 	/*
 	# open data dir
@@ -479,11 +482,11 @@ _getdents_loop:
 	call syscall_fail
 	jz _getdents_done
 	
-	mov r10, rax					# r10 = bytes_read
-	mov r9, offset g_getdents_buf	# r9 = entry_cursor_ptr
+	mov r15, rax					# r15 = bytes_read
+	mov r14, offset g_getdents_buf	# r14 = entry_cursor_ptr
 _getdents_entry_loop:
 	# only list reg and dir files
-	mov al, byte ptr [r9 + dirent64_off_type] 	# al = entry->d_type
+	movzx rax, byte ptr [r14 + dirent64_off_type] 	# al = entry->d_type
 	cmp al, DT_REG
 	je _getdents_accept_entry
 	# todo: this also accepts . and .. meta files (we should probably ignore these)
@@ -491,23 +494,51 @@ _getdents_entry_loop:
 	je _getdents_accept_entry
 	jmp _getdents_skip_entry
 _getdents_accept_entry:
+		
+		mov rsi, offset SLOT_INDEXFILE_NEXT
+		mov rdi, offset html_slot_indexfile
+		mov rcx, SLOT_INDEXFILE_NEXT_len
+		mov rdx, html_slot_indexfile_len
+		call tpl_subst
+		
+		lea rdi, [r14 + dirent64_off_name]
+		call str_len
+		mov rdx, rax
+		mov rsi, offset SLOT_INDEXFILE_PATH
+		lea rdi, [r14 + dirent64_off_name]
+		mov rcx, SLOT_INDEXFILE_PATH_len
+		call tpl_subst
+		nop
+		
+		/*
+		# DEBUG
+		mov rax, SYS_WRITE
+		mov edi, 1
+		mov rsi, [g_tpl_buf_ptr]
+		mov rdx, [g_tpl_buf_written_bytes]
+		syscall
+		*/
+		
+		/*
 		# DEBUG: write same data back to socket
-		lea rdi, [r9 + dirent64_off_name]
+		lea rdi, [r14 + dirent64_off_name]
 		call str_len
 		mov rdx, rax
 		
 		mov rax, SYS_WRITE
-		mov edi, [g_peer_socket_fd]
-		lea rsi, [r9 + dirent64_off_name]
+		# mov edi, [g_peer_socket_fd]
+		mov edi, 1
+		lea rsi, [r14 + dirent64_off_name]
 		# rdx is set above
 		syscall
 		call syscall_fail
+		*/
 _getdents_skip_entry:
 	# incr cursor and check for end
-	mov r8w, word ptr [r9 + dirent64_off_reclen]		# read d_reclen
-	add r9, r8
-	lea rax, [g_getdents_buf + r10]
-	cmp r9, rax
+	movzx r8, word ptr [r14 + dirent64_off_reclen]		# read d_reclen
+	add r14, r8
+	lea rax, [offset g_getdents_buf + r15]
+	cmp r14, rax
 	jb _getdents_entry_loop
 	jmp _getdents_loop
 	
@@ -517,6 +548,11 @@ _getdents_done:
 	# todo: maybe send 500 if something went wrong
 	mov rsi, offset default_resp_headers
 	mov rdx, default_resp_headers_len
+	call write_resp_str
+	
+	# send templated data
+	mov rsi, [g_tpl_buf_ptr]
+	mov rdx, [g_tpl_buf_written_bytes]
 	call write_resp_str
 	
 	/*
@@ -538,6 +574,9 @@ _getdents_done:
 	syscall
 	call syscall_fail
 	*/
+	
+	pop r14
+	pop r15
 	ret
 
 

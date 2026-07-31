@@ -19,6 +19,7 @@ SYS_CLOSE = 3
 SYS_OPEN = 2
 SYS_GETDENTS64 = 217
 SYS_FSTAT = 5
+SYS_NEWFSTATAT = 262
 
 O_RDONLY = 0x0	# kinda useless but heck, why not
 O_DIRECTORY = 0x10000
@@ -39,6 +40,7 @@ SO_REUSEADDR = 2
 
 # struct stat layout on x86_64: https://github.com/torvalds/linux/blob/e05b559f9cda350d0ab33c44a8c1151ca62d2875/arch/x86/include/uapi/asm/stat.h#L83
 OFFOF_STRUCT_STAT_st_mode = 24
+OFFOF_STRUCT_STAT_st_size = 48
 SIZEOF_STRUCT_STAT = 144
 
 
@@ -124,6 +126,7 @@ dir_tmp_file_url_len = 2048
 g_dir_tmp_file_url_buf: 	.space dir_tmp_file_url_len, 0
 g_dir_tmp_file_url_len:		.quad 0
 g_dir_tmp_file_name_len: 	.quad 0
+g_dir_tmp_file_size:		.quad 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
@@ -134,6 +137,7 @@ g_resp_fsend_buf:		.space resp_fsend_buf_size, 0
 intfmt_buf_len = 24
 g_intfmt_buf:			.space intfmt_buf_len, 0
 g_intfmt_ptrz:			.quad 0
+g_intfmt_len:			.quad 0
 
 
 # g_pbuf_
@@ -248,7 +252,11 @@ _die:
 # in r10				-- u64 to format
 # out g_intfmt_ptrz		-- ptr to formatted strz
 fmt_u64:
-	# load ptr to upper (last byte is nul byte)
+	# load ptr to second last byte (last byte is nul byte)
+	# since we write from the back to the front to get
+	# the correct order of digits.
+	# Then at the end set the ptr to point at the first digit
+	# so the calling code can then use the formatted number str
 	mov r9, offset g_intfmt_buf + intfmt_buf_len - 2		# r9 = buf_cursor_ptr
 _digit_loop:
 	# Unsigned divide RDX:RAX by r/m64,
@@ -257,7 +265,7 @@ _digit_loop:
 	mov rax, r10
 	mov rcx, 10
 	div rcx
-
+	
 	add rdx, '0'
 	mov byte ptr [r9], dl
 	
@@ -266,8 +274,13 @@ _digit_loop:
 	cmp r10, 0
 	jnbe _digit_loop
 	
-	# store final int ptr
+	# store formatted str ptr
 	mov [g_intfmt_ptrz], r9
+	# store str len
+	mov rax, (offset g_intfmt_buf + intfmt_buf_len - 1)	# len = buf_ptr + buf_len - 1 (null byte) - buf_cursor_ptr
+	sub rax, r9
+	mov [g_intfmt_len], rax
+	
 	ret
 
 
@@ -341,7 +354,7 @@ _read_loop:
 	jl _file_not_found
 	mov dword ptr [g_open_resp_file_fd], eax
 	
-	# -- stat file to determine if its a folder
+	# -- stat requested file to determine if its a folder
 	sub rsp, SIZEOF_STRUCT_STAT		# alloc struct stat
 	
 	mov rax, SYS_FSTAT
@@ -506,6 +519,24 @@ _getdents_accept_entry:
 		call str_len
 		mov [g_dir_tmp_file_name_len], rax
 		
+		# fstat file
+		sub rsp, SIZEOF_STRUCT_STAT
+		
+		mov rax, SYS_NEWFSTATAT
+		mov edi, dword ptr [g_open_resp_file_fd]		# int dirfd: if we are here we know this is a folder
+		lea rsi, [r14 + dirent64_off_name]	# char* path
+		mov rdx, rsp 						# stat* statbuf
+		xor r10, r10 						# int flags
+		syscall
+		call syscall_fail
+		# todo: error handling
+		
+		mov rcx, qword ptr [rsp + OFFOF_STRUCT_STAT_st_size]
+		mov qword ptr [g_dir_tmp_file_size], rcx	# store file_size
+		
+		# todo: handle errors
+		add rsp, SIZEOF_STRUCT_STAT
+		
 		# template file entry
 		mov rsi, offset SLOT_INDEXFILE_NEXT
 		mov rdi, offset html_slot_indexfile
@@ -520,13 +551,16 @@ _getdents_accept_entry:
 		call tpl_subst
 		
 		# template file size
-		/*
+		# in r10				-- u64 to format
+		# out g_intfmt_ptrz		-- ptr to formatted strz
+		mov r10, [g_dir_tmp_file_size]
+		call fmt_u64
+		
 		mov rsi, offset SLOT_INDEXFILE_SIZE
-		lea rdi, [r14 + dirent64_off_name]
+		mov rdi, [g_intfmt_ptrz]
 		mov rcx, SLOT_INDEXFILE_SIZE_len
-		mov rdx, 
+		mov rdx, [g_intfmt_len]
 		call tpl_subst
-		*/
 		
 		# assembly file url
 		mov rdi, offset g_dir_tmp_file_url_buf

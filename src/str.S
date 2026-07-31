@@ -21,16 +21,18 @@
 	pop rsi;
 
 
-# NOTE: doesn't impl scalar tails, so make sure your buffer
-#  has at least 32 bytes beginning at str_ptr
-# in rdi	-- str ptr
-# in rcx	-- str len
+# note: doesn't impl a scalar tail, so make sure
+#  the str data is at least 32 and a multiple of 32 bytes
+#  in size
+# 
+# in rdi	-- str_ptr
+# in rcx	-- str_len
 # in rdx	-- needle byte to find
 # out rax	-- first found byte offset or -1
 # out flags
 #	- SF if not found
 str_bfind:
-	xor r8, r8					# cursor_offset
+	xor r8, r8			# r8 = cursor_offset
 	vmovd xmm1, rdx
 	vpbroadcastb ymm1, xmm1		# cmp_mask = broadcast(needle:rdx)
 	
@@ -53,8 +55,11 @@ _found_bit:
 	ret
 
 
-# Can read up to 31 bytes beyond the haystack
-# (note: not very efficient at all!)
+# note: Can read up to 31 bytes beyond the haystack,
+#  so make sure (or hope for the best :D) that your
+#  buffer is large enough
+# (todo: extremely inefficient, maybe optimize this at least a little bit)
+# 
 # in rdi	-- haystack_ptr
 # in rsi	-- needle_ptr
 # in rcx	-- haystack_len

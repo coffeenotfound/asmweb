@@ -259,8 +259,9 @@ fmt_u64:
 	# so the calling code can then use the formatted number str
 	mov r9, offset g_intfmt_buf + intfmt_buf_len - 2		# r9 = buf_cursor_ptr
 _digit_loop:
-	# Unsigned divide RDX:RAX by r/m64,
-	# with result stored in RAX := Quotient, RDX := Remainder
+	# "Unsigned divide RDX:RAX by r/m64,
+	# with result stored in RAX := Quotient, RDX := Remainder"
+	# (https://www.felixcloutier.com/x86/div)
 	xor rdx, rdx
 	mov rax, r10
 	mov rcx, 10

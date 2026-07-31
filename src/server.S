@@ -90,6 +90,8 @@ html_slot_indexfile_len = . - html_slot_indexfile
 
 STR_AND_LEN(SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
 STR_AND_LEN(SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
+STR_AND_LEN(SLOT_INDEXFILE_SIZE, "<!--SLOT_INDEXFILE_SIZE-->")
+STR_AND_LEN(SLOT_INDEXFILE_URL, "<!--SLOT_INDEXFILE_URL-->")
 
 
 STR_AND_LEN(STRZ_AAA, "aaa bb ccc")
@@ -117,6 +119,11 @@ g_req_url_path_ptr: 		.quad 0
 g_req_data_pathz_len: 		.quad 0
 req_data_path_len = 2048
 g_req_data_pathz_buf: 		.space req_data_path_len, 0
+
+dir_tmp_file_url_len = 2048
+g_dir_tmp_file_url_buf: 	.space dir_tmp_file_url_len, 0
+g_dir_tmp_file_url_len:		.quad 0
+g_dir_tmp_file_name_len: 	.quad 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
@@ -494,21 +501,58 @@ _getdents_entry_loop:
 	je _getdents_accept_entry
 	jmp _getdents_skip_entry
 _getdents_accept_entry:
+		# calc path len
+		lea rdi, [r14 + dirent64_off_name]
+		call str_len
+		mov [g_dir_tmp_file_name_len], rax
 		
+		# template file entry
 		mov rsi, offset SLOT_INDEXFILE_NEXT
 		mov rdi, offset html_slot_indexfile
 		mov rcx, SLOT_INDEXFILE_NEXT_len
 		mov rdx, html_slot_indexfile_len
 		call tpl_subst
 		
-		lea rdi, [r14 + dirent64_off_name]
-		call str_len
-		mov rdx, rax
 		mov rsi, offset SLOT_INDEXFILE_PATH
 		lea rdi, [r14 + dirent64_off_name]
 		mov rcx, SLOT_INDEXFILE_PATH_len
+		mov rdx, [g_dir_tmp_file_name_len]
 		call tpl_subst
-		nop
+		
+		# template file size
+		/*
+		mov rsi, offset SLOT_INDEXFILE_SIZE
+		lea rdi, [r14 + dirent64_off_name]
+		mov rcx, SLOT_INDEXFILE_SIZE_len
+		mov rdx, 
+		call tpl_subst
+		*/
+		
+		# assembly file url
+		mov rdi, offset g_dir_tmp_file_url_buf
+		MEM_COPY([g_req_url_path_ptr], rdi, [g_req_url_path_len])
+		mov r8, [g_req_url_path_len] 	# r8 = url len
+		
+		mov rax, [g_req_url_path_ptr]
+		add rax, [g_req_url_path_len]
+		dec rax
+		cmp byte ptr [rax], '/'
+		je _dont_insert_url_slash
+			mov byte ptr [rdi + r8], '/'
+			inc r8
+		_dont_insert_url_slash:
+		lea rax, [r14 + dirent64_off_name]
+		lea rdx, [rdi + r8]
+		MEM_COPY(rax, rdx, [g_dir_tmp_file_name_len])
+		add r8, [g_dir_tmp_file_name_len]
+		mov [g_dir_tmp_file_url_len], r8
+		
+		# template file url
+		mov rsi, offset SLOT_INDEXFILE_URL
+		mov rdi, offset g_dir_tmp_file_url_buf
+		mov rcx, SLOT_INDEXFILE_URL_len
+		mov rdx, [g_dir_tmp_file_url_len]
+		call tpl_subst
 		
 		/*
 		# DEBUG

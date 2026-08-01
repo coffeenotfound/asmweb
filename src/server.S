@@ -79,8 +79,9 @@ STR_AND_LEN(str_resp_headers_404, "HTTP/1.1 404 Not Found\r\nConnection: close\r
 
 STR_AND_LEN(str_path_single_slash, "/")
 STR_AND_LEN(str_path_index_html, "/index.html")
-
 STR_AND_LEN(data_dir_pathz, "./data")
+STR_AND_LEN(FILENAME_DOT, ".")
+STR_AND_LEN(FILENAME_DOTDOT, "..")
 
 html_index:
 	#embed "../html/index.html" prefix(.byte ) suffix(, 0)
@@ -506,6 +507,26 @@ _getdents_loop:
 	mov r15, rax					# r15 = bytes_read
 	mov r14, offset g_getdents_buf	# r14 = entry_cursor_ptr
 _getdents_entry_loop:
+	# calc path len
+	lea rdi, [r14 + dirent64_off_name]
+	call str_len
+	mov [g_dir_tmp_file_name_len], rax
+	
+	# ignore files "." and ".."
+	lea rdi, [r14 + dirent64_off_name]
+	mov rsi, offset FILENAME_DOT
+	mov rcx, [g_dir_tmp_file_name_len]
+	mov rdx, FILENAME_DOT_len
+	call str_cmp_nn
+	je _getdents_skip_entry
+	
+	lea rdi, [r14 + dirent64_off_name]
+	mov rsi, offset FILENAME_DOTDOT
+	mov rcx, [g_dir_tmp_file_name_len]
+	mov rdx, FILENAME_DOTDOT_len
+	call str_cmp_nn
+	je _getdents_skip_entry
+	
 	# only list reg and dir files
 	movzx rax, byte ptr [r14 + dirent64_off_type] 	# al = entry->d_type
 	cmp al, DT_REG
@@ -515,11 +536,6 @@ _getdents_entry_loop:
 	je _getdents_accept_entry
 	jmp _getdents_skip_entry
 _getdents_accept_entry:
-		# calc path len
-		lea rdi, [r14 + dirent64_off_name]
-		call str_len
-		mov [g_dir_tmp_file_name_len], rax
-		
 		# fstat file
 		sub rsp, SIZEOF_STRUCT_STAT
 		

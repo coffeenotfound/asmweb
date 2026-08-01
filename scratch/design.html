@@ -34,6 +34,11 @@
 		.ftab td {
 			padding: 0.2rem 0;
 		}
+		
+		:root {
+			--ficon-file: url('https://www.apache.org/icons/image2.gif');
+			--ficon-dir: url('https://www.apache.org/icons/folder.gif');
+		}
 	</style>
 </head>
 
@@ -62,7 +67,7 @@
 			</tr>
 			<tr>
 				<td>
-					<img src="https://www.apache.org/icons/image2.gif"/>
+					<img style="content:var(--ficon-file);"/>
 					<a href="aaa">53496bb6633d0874.jpg</a>
 				</td>
 				<td>13-Oct-2026 22:43</td>
@@ -70,7 +75,7 @@
 			</tr>
 			<tr>
 				<td>
-					<img src="https://www.apache.org/icons/image2.gif"/>
+					<img style="content:var(--ficon-dir);"/>
 					<a href="aaa">b1a514a79f57fbff.jpg</a>
 				</td>
 				<td>13-Oct-2026 22:43</td>

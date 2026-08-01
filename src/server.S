@@ -96,7 +96,12 @@ STR_AND_LEN(SLOT_INDEXFILE_NAME, "<!--SLOT_INDEXFILE_NAME-->")
 STR_AND_LEN(SLOT_INDEXFILE_SIZE, "<!--SLOT_INDEXFILE_SIZE-->")
 STR_AND_LEN(SLOT_INDEXFILE_MTIME, "<!--SLOT_INDEXFILE_MTIME-->")
 STR_AND_LEN(SLOT_INDEXFILE_URL, "<!--SLOT_INDEXFILE_URL-->")
+STR_AND_LEN(SLOT_INDEXFILE_FTYPE, "<!--SLOT_INDEXFIL_FTYPE-->")
 
+STR_AND_LEN(FTYPE_FILE, "file")
+STR_AND_LEN(FTYPE_DIR, "dir")
+
+STR_AND_LEN(ICON_URL_FILE, "<!--SLOT_INDEXFILE_NEXT-->")
 
 STR_AND_LEN(STRZ_AAA, "aaa bb ccc")
 STR_AND_LEN(STRZ_BBB, "bb")
@@ -129,6 +134,7 @@ g_dir_tmp_file_url_buf: 	.space dir_tmp_file_url_len, 0
 g_dir_tmp_file_url_len:		.quad 0
 g_dir_tmp_file_name_len: 	.quad 0
 g_dir_tmp_file_size:		.quad 0
+g_dir_tmp_file_is_dir:		.quad 0
 
 getdents_buf_size = 4096
 g_getdents_buf:			.space getdents_buf_size, 0
@@ -546,13 +552,20 @@ _getdents_accept_entry:
 		mov rdx, rsp 						# stat* statbuf
 		xor r10, r10 						# int flags
 		syscall
-		call syscall_fail
 		# todo: error handling
+		call syscall_fail
 		
 		mov rcx, qword ptr [rsp + OFFOF_STRUCT_STAT_st_size]
 		mov qword ptr [g_dir_tmp_file_size], rcx	# store file_size
 		
-		# todo: handle errors
+		# check if file is a dir
+		mov r9d, dword ptr [rsp + OFFOF_STRUCT_STAT_st_mode]	# r9 = stat.st_mode
+		and r9d, S_IFMT
+		cmp r9d, S_IFDIR
+		setz al
+		movzx rax, al
+		mov qword ptr [g_dir_tmp_file_is_dir], rax	# store is_dir
+		
 		add rsp, SIZEOF_STRUCT_STAT
 		
 		# -- template file entry
@@ -605,6 +618,21 @@ _getdents_accept_entry:
 		mov rdi, offset g_dir_tmp_file_url_buf
 		mov rcx, SLOT_INDEXFILE_URL_len
 		mov rdx, [g_dir_tmp_file_url_len]
+		call tpl_subst
+		
+		# template file ftype
+		mov rdi, offset FTYPE_FILE
+		mov rdx, FTYPE_FILE_len
+		
+		mov rax, [g_dir_tmp_file_is_dir]
+		cmp rax, 0
+		je _is_ftype_file
+		mov rdi, offset FTYPE_DIR
+		mov rdx, FTYPE_DIR_len
+		_is_ftype_file:
+		
+		mov rsi, offset SLOT_INDEXFILE_FTYPE
+		mov rcx, SLOT_INDEXFILE_FTYPE_len
 		call tpl_subst
 		
 		/*

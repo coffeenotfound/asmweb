@@ -20,10 +20,12 @@ asmweb todo
 	[x] impl easier "write all str (optionally null-terminated)" to socket func
 	[x] send html
 
+[ ] update design
+	[x] use folder icon for dir files
+	[ ] format file size nicer
+	[ ] format mtime
 
 [ ] strip off url query param
-[ ] format file size nicer
-[ ] format mtime
 [x] ignore files "." and ".."
 
 

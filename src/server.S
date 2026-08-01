@@ -91,6 +91,7 @@ html_slot_indexfile:
 	#embed "../html/slot_indexfile.html" prefix(.byte ) suffix(, 0)
 html_slot_indexfile_len = . - html_slot_indexfile
 
+STR_AND_LEN(SLOT_DIR_PATH, "<!--SLOT_DIR_PATH-->")
 STR_AND_LEN(SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
 STR_AND_LEN(SLOT_INDEXFILE_NAME, "<!--SLOT_INDEXFILE_NAME-->")
 STR_AND_LEN(SLOT_INDEXFILE_SIZE, "<!--SLOT_INDEXFILE_SIZE-->")
@@ -323,7 +324,7 @@ _read_loop:
 	# find beginning
 	lea rdi, [g_req_read_buf]
 	mov rcx, [g_req_status_line_len]
-	mov rdx, 32		# 32 = ' '
+	mov rdx, ' '
 	call str_bfind	# todo: handle errors but we expect status lines to be formatted properly for now
 	inc rax			# todo: assuming method and path are separated by a single space
 	mov [g_req_path_offset], rax
@@ -335,9 +336,20 @@ _read_loop:
 	# find end of path
 	add rdi, rax
 	sub rcx, rax
+	mov rdx, ' '
 	call str_bfind	# todo: handle error but we expect status lines to be formatted properly for now
 	mov [g_req_url_path_len], rax
-
+	
+	# strip query params off url
+	mov rdi, [g_req_url_path_ptr]
+	mov rcx, [g_req_url_path_len]
+	mov rdx, '?'
+	call str_bfind
+	cmp rax, 0
+	jl _no_query_params
+		mov [g_req_url_path_len], rax
+	_no_query_params:
+	
 	# -- build data file path from url path
 	# essentially we just copy data_dir_path ("data")
 	# and then the url path. Since the url path always has a
@@ -501,6 +513,13 @@ send_folder_index_resp:
 	mov rcx, html_index_len
 	call tpl_write_first
 	
+	# template dir path
+	mov rsi, offset SLOT_DIR_PATH
+	mov rdi, [g_req_url_path_ptr]
+	mov rcx, SLOT_DIR_PATH_len
+	mov rdx, [g_req_url_path_len]
+	call tpl_subst
+	
 _getdents_loop:
 	# loop over dir files
 	mov rax, SYS_GETDENTS64
@@ -627,8 +646,8 @@ _getdents_accept_entry:
 		mov rax, [g_dir_tmp_file_is_dir]
 		cmp rax, 0
 		je _is_ftype_file
-		mov rdi, offset FTYPE_DIR
-		mov rdx, FTYPE_DIR_len
+			mov rdi, offset FTYPE_DIR
+			mov rdx, FTYPE_DIR_len
 		_is_ftype_file:
 		
 		mov rsi, offset SLOT_INDEXFILE_FTYPE

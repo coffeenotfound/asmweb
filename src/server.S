@@ -52,6 +52,7 @@ SIZEOF_STRUCT_STAT = 144
 #include "str.S"
 #include "pbuf.S"
 #include "tpl.S"
+#include "time.S"
 
 
 

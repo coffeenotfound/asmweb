@@ -92,8 +92,9 @@ html_slot_indexfile:
 html_slot_indexfile_len = . - html_slot_indexfile
 
 STR_AND_LEN(SLOT_INDEXFILE_NEXT, "<!--SLOT_INDEXFILE_NEXT-->")
-STR_AND_LEN(SLOT_INDEXFILE_PATH, "<!--SLOT_INDEXFILE_PATH-->")
+STR_AND_LEN(SLOT_INDEXFILE_NAME, "<!--SLOT_INDEXFILE_NAME-->")
 STR_AND_LEN(SLOT_INDEXFILE_SIZE, "<!--SLOT_INDEXFILE_SIZE-->")
+STR_AND_LEN(SLOT_INDEXFILE_MTIME, "<!--SLOT_INDEXFILE_MTIME-->")
 STR_AND_LEN(SLOT_INDEXFILE_URL, "<!--SLOT_INDEXFILE_URL-->")
 
 
@@ -554,16 +555,17 @@ _getdents_accept_entry:
 		# todo: handle errors
 		add rsp, SIZEOF_STRUCT_STAT
 		
-		# template file entry
+		# -- template file entry
 		mov rsi, offset SLOT_INDEXFILE_NEXT
 		mov rdi, offset html_slot_indexfile
 		mov rcx, SLOT_INDEXFILE_NEXT_len
 		mov rdx, html_slot_indexfile_len
 		call tpl_subst
 		
-		mov rsi, offset SLOT_INDEXFILE_PATH
+		# template file name
+		mov rsi, offset SLOT_INDEXFILE_NAME
 		lea rdi, [r14 + dirent64_off_name]
-		mov rcx, SLOT_INDEXFILE_PATH_len
+		mov rcx, SLOT_INDEXFILE_NAME_len
 		mov rdx, [g_dir_tmp_file_name_len]
 		call tpl_subst
 		
@@ -726,6 +728,7 @@ create_server_socket:
 	# construct local addr (sockaddr_in)
 	sub rsp, 16		# sizeof(sockaddr_in) == 16
 	mov word ptr [rsp + 0], AF_INET			# in host order
+	
 	
 	# mov word ptr [rsp + 2], 0x901F		# port 8080, in network order
 	mov rax, 8080

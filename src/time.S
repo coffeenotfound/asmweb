@@ -1,9 +1,15 @@
 .section .data
 
+# these are used by civil_from_days
 tm_doy:	.quad 0
 tm_m:	.quad 0
 tm_d: 	.quad 0
 tm_y:	.quad 0
+
+# these are used by fmt_epoch_timestamp_secs
+tm_sec:	.quad 0
+tm_min:	.quad 0
+tm_hour:.quad 0
 
 tm_datetime_fmt_buf_size = 64
 tm_datetime_fmt_buf: 	.space tm_datetime_fmt_buf_size, 0
@@ -12,8 +18,88 @@ tm_datetime_fmt_len:	.quad 0
 
 .section .text
 
-fmt_epoch_timestamp:
+
+# in rdi	-- secs since epoch  (only positive is supported right now)
+fmt_epoch_timestamp_secs:
+	push r15
+	push r14
 	
+	xor rdx, rdx
+	mov rax, rdi
+	mov rcx, 60
+	div rcx
+	mov [tm_sec], rdx
+	
+	xor rdx, rdx
+	mov rcx, 60
+	div rcx
+	mov [tm_min], rdx
+	
+	xor rdx, rdx
+	mov rcx, 24
+	div rcx
+	mov [tm_hour], rdx
+	
+	mov rdi, rax
+	call civil_from_days
+	
+	mov r15, offset tm_datetime_fmt_buf
+	
+	# fmt year
+	mov r10, [tm_y]
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
+	add r15, [g_intfmt_len]
+	
+	# write '-'
+	mov byte ptr [r15], '-'
+	inc r15
+	
+	# fmt month
+	mov r10, [tm_m]
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
+	add r15, [g_intfmt_len]
+	
+	# write '-'
+	mov byte ptr [r15], '-'
+	inc r15
+	
+	# fmt day
+	mov r10, [tm_d]
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
+	add r15, [g_intfmt_len]
+	
+	# write ' '
+	mov byte ptr [r15], ' '
+	inc r15
+	
+	# fmt hour
+	mov r10, [tm_hour]
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
+	add r15, [g_intfmt_len]
+	
+	# write ':'
+	mov byte ptr [r15], ':'
+	inc r15
+	
+	# fmt mins
+	mov r10, [tm_min]
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
+	add r15, [g_intfmt_len]
+	
+	# calc len
+	mov rax, r15
+	sub rax, offset tm_datetime_fmt_buf
+	mov [tm_datetime_fmt_len], rax
+	
+	pop r14
+	pop r15
+	ret
+
 
 # implementation of Howard Hinnant's civil_from_days:
 # https://howardhinnant.github.io/date_algorithms.html#civil_from_days

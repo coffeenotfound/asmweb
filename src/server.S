@@ -41,6 +41,7 @@ SO_REUSEADDR = 2
 # struct stat layout on x86_64: https://github.com/torvalds/linux/blob/e05b559f9cda350d0ab33c44a8c1151ca62d2875/arch/x86/include/uapi/asm/stat.h#L83
 OFFOF_STRUCT_STAT_st_mode = 24
 OFFOF_STRUCT_STAT_st_size = 48
+OFFOF_STRUCT_STAT_st_mtime = 88
 SIZEOF_STRUCT_STAT = 144
 
 
@@ -136,6 +137,7 @@ g_dir_tmp_file_url_buf: 	.space dir_tmp_file_url_len, 0
 g_dir_tmp_file_url_len:		.quad 0
 g_dir_tmp_file_name_len: 	.quad 0
 g_dir_tmp_file_size:		.quad 0
+g_dir_tmp_file_mtime_secs:	.quad 0
 g_dir_tmp_file_is_dir:		.quad 0
 
 getdents_buf_size = 4096
@@ -168,6 +170,17 @@ _start:
 	mov rsi, offset msg_hello
 	mov rdx, msg_hello_len
 	call print_n
+	
+	
+	# DEBUG: time
+	mov rdi, 1785688495
+	call fmt_epoch_timestamp_secs
+	
+	mov rax, SYS_WRITE
+	mov edi, 1
+	mov rsi, offset tm_datetime_fmt_buf
+	mov rdx, [tm_datetime_fmt_len]
+	syscall
 	
 	/*
 	# DEBUG: test str_sfind_nn
@@ -578,6 +591,8 @@ _getdents_accept_entry:
 		
 		mov rcx, qword ptr [rsp + OFFOF_STRUCT_STAT_st_size]
 		mov qword ptr [g_dir_tmp_file_size], rcx	# store file_size
+		mov rcx, qword ptr [rsp + OFFOF_STRUCT_STAT_st_mtime]
+		mov qword ptr [g_dir_tmp_file_mtime_secs], rcx	# store file_mtime
 		
 		# check if file is a dir
 		mov r9d, dword ptr [rsp + OFFOF_STRUCT_STAT_st_mode]	# r9 = stat.st_mode
@@ -654,6 +669,22 @@ _getdents_accept_entry:
 		
 		mov rsi, offset SLOT_INDEXFILE_FTYPE
 		mov rcx, SLOT_INDEXFILE_FTYPE_len
+		call tpl_subst
+		
+		# template mtime
+		/*
+		xor rdx, rdx
+		mov rax, [g_dir_tmp_file_mtime_secs]
+		mov rcx, 86400		# ratio secs to days
+		div rcx
+		*/
+		mov rdi, [g_dir_tmp_file_mtime_secs]
+		call fmt_epoch_timestamp_secs
+		
+		mov rsi, offset SLOT_INDEXFILE_MTIME
+		mov rdi, offset tm_datetime_fmt_buf
+		mov rcx, SLOT_INDEXFILE_MTIME_len
+		mov rdx, [tm_datetime_fmt_len]
 		call tpl_subst
 		
 		/*

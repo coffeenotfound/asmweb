@@ -21,11 +21,11 @@ fmt_epoch_timestamp:
 # in rdi	-- days since epoch  (only positive is supported right now)
 # (clobbers about every register known to man)
 civil_from_days:
-	mov r15, rdi
-	
 	push r15
 	push r14
 	push r12
+	
+	mov r15, rdi
 	
 	# r12 := <tmp>
 	# r15 := z
@@ -47,11 +47,9 @@ civil_from_days:
 	mov r14, rax
 	
 	## const unsigned doe = static_cast<unsigned>(z - era * 146097)
-	mov rax, r14
-	mov rcx, 146097
-	imul rcx
 	mov r11, r15
-	sub r11, rax	# rax from imul
+	imul rax, r14, 146097
+	sub r11, rax
 	
 	## const unsigned yoe = (doe - doe/1460 + doe/36524 - doe/146096) / 365; 
 	mov r10, r11
@@ -59,76 +57,67 @@ civil_from_days:
 	xor rdx, rdx	# doe/1460
 	mov rax, r11
 	mov rcx, 1460
-	div rcx
-	
+	div ecx
 	sub r10, rax
 	
 	xor rdx, rdx	# doe/36524
 	mov rax, r11
 	mov rcx, 36524
-	div rcx
+	div ecx
 	add r10, rax
 	
 	xor rdx, rdx	# doe/146096
 	mov rax, r11
 	mov rcx, 146096
-	div rcx
+	div ecx
 	sub r10, rax
 	
 	xor rdx, rdx	# / 365
 	mov rax, r10
 	mov rcx, 365
-	div rcx
+	div ecx
 	mov r10, rax
 	
 	## const int y = static_cast<Int>(yoe) + era * 400
-	mov rax, r14
-	mov rcx, 400
-	imul rcx
-	
 	mov r9, r10
+	imul rax, r14, 400
 	add r9, rax
 	
 	## const unsigned doy = doe - (365*yoe + yoe/4 - yoe/100);
-	mov r8, r11
-	
-	mov rax, r10	# 365*yoe
-	mov rcx, 365
-	mul rcx
-	sub r8, rax
+	imul r12, r10, 365	# 365*yoe
 	
 	mov rax, r10	# yoe/4
-	shr rax, 4
-	add r8, rax
+	shr rax, 2
+	add r12, rax
 	
 	xor rdx, rdx	# yoe/100
 	mov rax, r10
 	mov rcx, 100
-	div rcx
-	sub r8, rax
+	div ecx
+	sub r12, rax
 	
-	mov [tm_doy], r8
+	mov rax, r11	# doe - (..)
+	sub rax, r12
+	mov [tm_doy], rax
 	
 	## const unsigned mp = (5*doy + 2)/153;
-	mov rax, [tm_doy]
+	# rax from just above
 	lea rax, [rax * 4 + rax + 2]	# oh yeeee boyyy
 	
 	xor rdx, rdx
 	mov rcx, 153
-	div rcx
+	div ecx
 	mov r8, rax
 	
 	## const unsigned d = doy - (153*mp+2)/5 + 1;
 	mov r12, [tm_doy]
 	
-	mov rax, r8		# 153*mp+2
-	mov rcx, 153
-	mul rcx
+	imul rax, r8, 153 	# 153*mp+2
 	add rax, 2
 	
 	xor rdx, rdx	# / 5
 	mov rcx, 5
-	div rcx
+	div ecx
 	
 	sub r12, rax
 	inc r12
@@ -149,7 +138,7 @@ civil_from_days:
 	_e:
 	mov [tm_y], r9
 	
-	push r12
-	push r14
-	push r15
+	pop r12
+	pop r14
+	pop r15
 	ret

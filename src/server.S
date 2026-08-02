@@ -25,6 +25,7 @@ O_RDONLY = 0x0	# kinda useless but heck, why not
 O_DIRECTORY = 0x10000
 DT_REG = 8
 DT_DIR = 4
+DT_LNK = 10
 
 # https://manpages.debian.org/testing/manpages/S_ISDIR.3.en.html
 # (note, these are octal literals!)
@@ -591,12 +592,13 @@ _getdents_entry_loop:
 	call str_cmp_nn
 	je _getdents_skip_entry
 	
-	# only list reg and dir files
+	# only list reg, dir and link files
 	movzx rax, byte ptr [r14 + dirent64_off_type] 	# al = entry->d_type
 	cmp al, DT_REG
 	je _getdents_accept_entry
-	# todo: this also accepts . and .. meta files (we should probably ignore these)
 	cmp al, DT_DIR
+	je _getdents_accept_entry
+	cmp al, DT_LNK
 	je _getdents_accept_entry
 	jmp _getdents_skip_entry
 _getdents_accept_entry:

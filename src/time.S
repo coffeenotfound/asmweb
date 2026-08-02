@@ -1,5 +1,8 @@
-.section .data
+.section .rodata
+tm_month_strs: .ascii "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec "
 
+
+.section .data
 # these are used by civil_from_days
 tm_doy:	.quad 0
 tm_m:	.quad 0
@@ -17,8 +20,6 @@ tm_datetime_fmt_len:	.quad 0
 
 
 .section .text
-
-
 # in rdi	-- secs since epoch  (only positive is supported right now)
 fmt_epoch_timestamp_secs:
 	push r15
@@ -45,8 +46,9 @@ fmt_epoch_timestamp_secs:
 	
 	mov r15, offset tm_datetime_fmt_buf
 	
-	# fmt year
-	mov r10, [tm_y]
+	# fmt day
+	mov qword ptr [g_intfmt_opt_mindigits], 2
+	mov r10, [tm_d]
 	call fmt_u64
 	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
 	add r15, [g_intfmt_len]
@@ -56,17 +58,24 @@ fmt_epoch_timestamp_secs:
 	inc r15
 	
 	# fmt month
+	/*
 	mov r10, [tm_m]
 	call fmt_u64
 	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
 	add r15, [g_intfmt_len]
+	*/
+	mov r10, [tm_m]
+	dec r10		# month nr -> index
+	lea rsi, [offset tm_month_strs + r10 * 4]
+	MEM_COPY(rsi, r15, 3)
+	add r15, 3
 	
 	# write '-'
 	mov byte ptr [r15], '-'
 	inc r15
 	
-	# fmt day
-	mov r10, [tm_d]
+	# fmt year
+	mov r10, [tm_y]
 	call fmt_u64
 	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
 	add r15, [g_intfmt_len]
@@ -76,6 +85,7 @@ fmt_epoch_timestamp_secs:
 	inc r15
 	
 	# fmt hour
+	mov qword ptr [g_intfmt_opt_mindigits], 2
 	mov r10, [tm_hour]
 	call fmt_u64
 	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])
@@ -86,6 +96,7 @@ fmt_epoch_timestamp_secs:
 	inc r15
 	
 	# fmt mins
+	mov qword ptr [g_intfmt_opt_mindigits], 2
 	mov r10, [tm_min]
 	call fmt_u64
 	MEM_COPY([g_intfmt_ptrz], r15, [g_intfmt_len])

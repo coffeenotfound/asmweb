@@ -150,7 +150,7 @@ intfmt_buf_len = 24
 g_intfmt_buf:			.space intfmt_buf_len, 0
 g_intfmt_ptrz:			.quad 0
 g_intfmt_len:			.quad 0
-
+g_intfmt_opt_mindigits:	.quad 0		# set to pad out leading zero digits if wanted, gets reset to 0 on each fmt_u64 call
 
 # g_pbuf_
 tpl_buf_mem_len = 0x100000
@@ -305,6 +305,29 @@ _digit_loop:
 	mov rax, (offset g_intfmt_buf + intfmt_buf_len - 1)	# len = buf_ptr + buf_len - 1 (null byte) - buf_cursor_ptr
 	sub rax, r9
 	mov [g_intfmt_len], rax
+	
+	# -- emit leading zeros if needed
+	mov rax, [g_intfmt_opt_mindigits]
+	
+	mov rdi, intfmt_buf_len - 1		# cap mindigits to buf_len - 1
+	cmp rax, rdi
+	cmovg rax, rdi
+	
+	sub rax, [g_intfmt_len]			# zeros_to_emit = mindigits - fmt_len	
+_lead_zeros_loop:
+	cmp rax, 0
+	jle _lead_zeros_done
+	
+	dec qword ptr [g_intfmt_ptrz]
+	mov rdi, [g_intfmt_ptrz]
+	mov byte ptr [rdi], '0'
+	inc qword ptr [g_intfmt_len]
+	dec rax
+	
+	jmp _lead_zeros_loop
+	
+_lead_zeros_done:
+	mov qword ptr [g_intfmt_opt_mindigits], 0
 	
 	ret
 

@@ -24,7 +24,8 @@ asmweb todo
 	[x] use folder icon for dir files
 	[x] template "Index of " path
 	[ ] format file size nicer
-	[ ] format mtime
+	[x] format mtime
+		[x] pretty date formatting
 
 [x] strip off url query param
 [x] ignore files "." and ".."

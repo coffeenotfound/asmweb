@@ -161,6 +161,9 @@ g_tpl_buf_ptr:				.quad 0
 g_tpl_buf_ptr_tmp:			.quad 0
 g_tpl_buf_written_bytes:	.quad 0
 
+bytesize_fmt_buf_len = 64
+g_bytesize_fmt_buf:		.space bytesize_fmt_buf_len, 0
+g_bytesize_fmt_len: 	.quad 0
 
 
 .section .text
@@ -172,7 +175,7 @@ _start:
 	mov rdx, msg_hello_len
 	call print_n
 	
-	
+	/*
 	# DEBUG: time
 	mov rdi, 1785688495
 	call fmt_epoch_timestamp_secs
@@ -182,6 +185,7 @@ _start:
 	mov rsi, offset tm_datetime_fmt_buf
 	mov rdx, [tm_datetime_fmt_len]
 	syscall
+	*/
 	
 	/*
 	# DEBUG: test str_sfind_nn
@@ -330,6 +334,11 @@ _lead_zeros_loop:
 _lead_zeros_done:
 	mov qword ptr [g_intfmt_opt_mindigits], 0
 	
+	ret
+
+
+# in r10	-- u64 byte size to format
+fmt_byte_size:
 	ret
 
 
@@ -536,17 +545,6 @@ send_folder_index_resp:
 	push r14
 	
 	# -- walk files to serve
-	/*
-	# open data dir
-	mov rax, SYS_OPEN
-	mov rdi, offset data_dir_pathz
-	mov rsi, (O_DIRECTORY | O_RDONLY)
-	mov rdx, 0		# todo: (u)mode_t but no clue what this is needed for, most references don't even specify it...
-	syscall
-	call syscall_fail
-	mov [g_data_dir_fd], eax
-	*/
-	
 	# start templating
 	mov rsi, offset html_index
 	mov rcx, html_index_len

@@ -176,6 +176,18 @@ _start:
 	call print_n
 	
 	/*
+	# DEBUG: bytesize
+	mov r10, 169373
+	call fmt_byte_size
+	
+	mov rax, SYS_WRITE
+	mov edi, 1
+	mov rsi, offset g_bytesize_fmt_buf
+	mov rdx, [g_bytesize_fmt_len]
+	syscall
+	*/
+	
+	/*
 	# DEBUG: time
 	mov rdi, 1785688495
 	call fmt_epoch_timestamp_secs
@@ -339,6 +351,51 @@ _lead_zeros_done:
 
 # in r10	-- u64 byte size to format
 fmt_byte_size:
+	cmp r10, 1000
+	jb _no_suffix
+	
+	mov rcx, 1000/10
+	mov rsi, 'K'
+	cmp r10, 1000000
+	jb _with_suffix
+	mov rcx, 1000000/10
+	mov rsi, 'M'
+	cmp r10, 1000000000
+	jb _with_suffix
+	mov rcx, 1000000000/10
+	mov rsi, 'G'
+	
+_with_suffix:
+	xor rdx, rdx
+	mov rax, r10
+	div rcx
+	
+	mov r10, rax
+	call fmt_u64
+	
+	mov rax, [g_intfmt_len]
+	mov r9, rax
+	mov r8, rax
+	dec r8
+	MEM_COPY([g_intfmt_ptrz], offset g_bytesize_fmt_buf, r8)
+	
+	mov byte ptr [r8 + offset g_bytesize_fmt_buf], '.'
+	
+	mov rax, [g_intfmt_ptrz]
+	mov rax, [rax + r8]
+	mov byte ptr [r8 + 1 + offset g_bytesize_fmt_buf], al
+	
+	mov byte ptr [r8 + 2 + offset g_bytesize_fmt_buf], sil
+	
+	add r8, 3
+	mov [g_bytesize_fmt_len], r8
+	ret
+	
+_no_suffix:
+	call fmt_u64
+	MEM_COPY([g_intfmt_ptrz], offset g_bytesize_fmt_buf, [g_intfmt_len])
+	mov rcx, [g_intfmt_len]
+	mov [g_bytesize_fmt_len], rcx
 	ret
 
 
@@ -642,15 +699,13 @@ _getdents_accept_entry:
 		call tpl_subst
 		
 		# template file size
-		# in r10				-- u64 to format
-		# out g_intfmt_ptrz		-- ptr to formatted strz
 		mov r10, [g_dir_tmp_file_size]
-		call fmt_u64
+		call fmt_byte_size
 		
 		mov rsi, offset SLOT_INDEXFILE_SIZE
-		mov rdi, [g_intfmt_ptrz]
+		mov rdi, offset g_bytesize_fmt_buf
 		mov rcx, SLOT_INDEXFILE_SIZE_len
-		mov rdx, [g_intfmt_len]
+		mov rdx, [g_bytesize_fmt_len]
 		call tpl_subst
 		
 		# assembly file url

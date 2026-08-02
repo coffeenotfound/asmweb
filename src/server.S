@@ -286,6 +286,7 @@ _digit_loop:
 	jnbe _digit_loop
 	
 	# store formatted str ptr
+	inc r9		# r9 points to the next (downwards) free byte, so the first byte of the string is r9+1
 	mov [g_intfmt_ptrz], r9
 	# store str len
 	mov rax, (offset g_intfmt_buf + intfmt_buf_len - 1)	# len = buf_ptr + buf_len - 1 (null byte) - buf_cursor_ptr

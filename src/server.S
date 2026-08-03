@@ -74,7 +74,6 @@ STR_AND_LEN(msg_hello, "Hello! Accepting connections now...\n")
 STR_AND_LEN(msg_die, "a syscall failed, dying now\n")
 # STR_AND_LEN(test_resp, "HTTP/1.1 200 OK\r\nContent-Length: 47\r\n\r\n<!DOCTYPE html><html><body>hello!</body></html>\r\n")
 
-STR_AND_LEN(default_resp_headers, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 STR_AND_LEN(str_resp_headers_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n")
 # not sending Content-Type seems to be enough for getting MIME sniffing in browsers to work
 STR_AND_LEN(str_resp_headers_file_ok, "HTTP/1.1 200 OK\r\nConnection: close\r\nContent-Disposition:inline\r\n\r\n")
@@ -107,13 +106,8 @@ STR_AND_LEN(FTYPE_DIR, "dir")
 
 STR_AND_LEN(ICON_URL_FILE, "<!--SLOT_INDEXFILE_NEXT-->")
 
-STR_AND_LEN(STRZ_AAA, "aaa bb ccc")
-STR_AND_LEN(STRZ_BBB, "bb")
-STR_AND_LEN(STRZ_ZZZ, "111##!##!bb!##!##333")
 
-
-
-.section .data
+.section .bss
 g_socket_fd:		.int 0
 g_peer_socket_fd:	.int 0
 g_data_dir_fd: 		.int 0
@@ -801,8 +795,8 @@ _getdents_done:
 	
 	# send ok response headers
 	# todo: maybe send 500 if something went wrong
-	mov rsi, offset default_resp_headers
-	mov rdx, default_resp_headers_len
+	mov rsi, offset str_resp_headers_ok
+	mov rdx, str_resp_headers_ok_len
 	call write_resp_str
 	
 	# send templated data

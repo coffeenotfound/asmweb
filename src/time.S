@@ -2,7 +2,7 @@
 tm_month_strs: .ascii "Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec "
 
 
-.section .data
+.section .bss
 # these are used by civil_from_days
 tm_doy:	.quad 0
 tm_m:	.quad 0

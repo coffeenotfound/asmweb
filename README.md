@@ -11,13 +11,13 @@
 ### Usage
 The server is a simple http file server and as such servers all files in the `data/` directory. The repo includes some test files (including a symlink to the repo itself!) so you can quickly test out the file listings.
 
-To run the server you can either call `make run` which will automatically compile the server or just manually invoke the binary via `./server` after you have compiled it. Note that right now you cannot pass any cli flags to configure the server (data dir path, port, etc.), but that's something I may add in the future.
+To run the server you can either call `make run` which will automatically compile it or just manually invoke the binary via `./server` after it's compiled. Note that right now it doesn't support passing any cli flags to configure the server (data dir path, port, etc.), but that's something I may add in the future.
 
-After running the binary, the root data directory listing is now available at [`http://localhost:8080`](http://localhost:8080)
+After starting the server, the root data directory listing is now available at [`http://localhost:8080`](http://localhost:8080)
 
 
 ### Compiling
-Compiling the server is done simply via `make build`
+Compiling the server binary is done simply via `make build`, being written to `./server`
 
 ### Design
 #### Routes

@@ -9,7 +9,7 @@
 
 
 ### Usage
-The server is a simple http file server and as such servers all files in the `data/` directory. The repo includes some test files (including a symlink to the repo itself!) so you can quickly test out the file listings.
+The server is a simple http file server and as such servers all files in the `data/` directory. The repo includes some test files (including a symlink to the [repo](http://localhost:8080/asmweb) itself!) so you can quickly test out the file listings.
 
 To run the server you can either call `make run` which will automatically compile it or just manually invoke the binary via `./server` after it's compiled. Note that right now it doesn't support passing any cli flags to configure the server (data dir path, port, etc.), but that's something I may add in the future.
 

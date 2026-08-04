@@ -583,7 +583,7 @@ _getdents_accept_entry:
 		mov rdx, [g_bytesize_fmt_len]
 		call tpl_subst
 		
-		# assembly file url
+		# -- assembly file url
 		mov rdi, offset g_dir_tmp_file_url_buf
 		MEM_COPY([g_req_url_path_ptr], rdi, [g_req_url_path_len])
 		mov r8, [g_req_url_path_len] 	# r8 = url len
@@ -592,14 +592,23 @@ _getdents_accept_entry:
 		add rax, [g_req_url_path_len]
 		dec rax
 		cmp byte ptr [rax], '/'
-		je _dont_insert_url_slash
+		je _dont_insert_joining_slash
 			mov byte ptr [rdi + r8], '/'
 			inc r8
-		_dont_insert_url_slash:
+		_dont_insert_joining_slash:
 		lea rax, [r14 + dirent64_off_name]
 		lea rdx, [rdi + r8]
 		MEM_COPY(rax, rdx, [g_dir_tmp_file_name_len])
 		add r8, [g_dir_tmp_file_name_len]
+		
+		# if_ folder and we don't have a trailing slash, add it
+		cmp byte ptr [rdi + r8 - 1], '/'
+		je _dont_add_trailing_slash
+		cmp qword ptr [g_dir_tmp_file_is_dir], 0
+		je _dont_add_trailing_slash
+			mov byte ptr [rdi + r8], '/'
+			inc r8
+		_dont_add_trailing_slash:
 		mov [g_dir_tmp_file_url_len], r8
 		
 		# template file url
